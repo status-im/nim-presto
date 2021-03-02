@@ -2,7 +2,7 @@ import std/[unittest, strutils, parseutils]
 import helpers
 import chronos, chronos/apps
 import stew/byteutils
-import ../rest/route, ../rest/segpath
+import ../presto/route, ../presto/segpath
 
 when defined(nimHasUsed): {.used.}
 

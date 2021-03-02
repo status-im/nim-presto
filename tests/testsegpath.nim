@@ -1,5 +1,5 @@
 import std/[unittest, strutils]
-import ../rest/segpath
+import ../presto/segpath
 
 when defined(nimHasUsed): {.used.}
 
