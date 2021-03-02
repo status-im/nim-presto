@@ -24,7 +24,7 @@ proc decodeString*(t: typedesc[GenericType[int]],
   if parseSaturatedNatural(value, v) == 0:
     err("Unable to decode decimal string")
   else:
-    if v == high(int64):
+    if v == high(int):
       err("Integer overflow")
     else:
       ok(GenericType[int](data: v))
@@ -51,7 +51,7 @@ proc decodeString*(t: typedesc[CustomType1],
     if parseSaturatedNatural(res, v) == 0:
       err("Unable to decode decimal string")
     else:
-      if v == high(int64):
+      if v == high(int):
         err("Integer overflow")
       else:
         ok(CustomType1(kind: CustomKind.Level1, level1: v))
@@ -73,7 +73,7 @@ proc decodeString*(t: typedesc[int], value: string): RestResult[int] =
   if parseSaturatedNatural(value, v) == 0:
     err("Unable to decode decimal string")
   else:
-    if v == high(int64):
+    if v == high(int):
       err("Integer overflow")
     else:
       ok(v)
