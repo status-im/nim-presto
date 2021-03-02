@@ -30,13 +30,13 @@ type
   ByteChar* = string | seq[byte]
 
 proc error*(t: typedesc[RestApiResponse], code: int,
-               msg: string = "", status: HttpCode = Http200,
-               strace: string = ""): RestApiResponse =
+            msg: string = "", status: HttpCode = Http200,
+            strace: string = ""): RestApiResponse =
   err(RestApiError(status: status, code: code, message: msg,
                    stacktrace: strace))
 
 proc response*(t: typedesc[RestApiResponse], data: ByteChar,
-                  contentType = "text/text"): RestApiResponse =
+               contentType = "text/text"): RestApiResponse =
   when data is seq[byte]:
     ok(ContentBody(contentType: contentType, data: data))
   else:

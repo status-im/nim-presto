@@ -1,6 +1,6 @@
 import std/[strutils, parseutils]
 import stew/byteutils
-import ../rest/common
+import ../presto/common
 
 type
   CustomKind* {.pure.} = enum
