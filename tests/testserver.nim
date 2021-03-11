@@ -61,7 +61,7 @@ suite "REST API server test suite":
       return RestApiResponse.response("ok-1")
 
     router.api(MethodGet, "/test/simple/3") do () -> RestApiResponse:
-      return RestApiResponse.error(505, "Some error", Http505)
+      return RestApiResponse.error(Http505, "Some error", "text/error")
 
     router.api(MethodGet, "/test/simple/4") do () -> RestApiResponse:
       if true:
@@ -94,7 +94,6 @@ suite "REST API server test suite":
         res1 == ClientResponse(status: 410)
         res2 == ClientResponse(status: 200, data: "ok-1")
         res3.status == 505
-        res3.data.find("505") >= 0
         res4 == ClientResponse(status: 503)
         res5 == ClientResponse(status: 404)
         res6 == ClientResponse(status: 400)
@@ -106,29 +105,28 @@ suite "REST API server test suite":
     router.api(MethodGet, "/test/{smp1}") do (
         smp1: int) -> RestApiResponse:
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       return RestApiResponse.response($smp1.get())
 
     router.api(MethodGet, "/test/{smp1}/{smp2}") do (
         smp1: int, smp2: string) -> RestApiResponse:
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       if smp2.isErr():
-        return RestApiResponse.error(412, $smp2.error(), Http412)
+        return RestApiResponse.error(Http412, $smp2.error())
       return RestApiResponse.response($smp1.get() & ":" &
                                          smp2.get())
 
     router.api(MethodGet, "/test/{smp1}/{smp2}/{smp3}") do (
         smp1: int, smp2: string, smp3: seq[byte]) -> RestApiResponse:
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       if smp2.isErr():
-        return RestApiResponse.error(412, $smp2.error(), Http412)
+        return RestApiResponse.error(Http412, $smp2.error())
       if smp3.isErr():
-        return RestApiResponse.error(413, $smp3.error(), Http413)
-      return RestApiResponse.response($smp1.get() & ":" &
-                                         smp2.get() & ":" &
-                                         toHex(smp3.get()))
+        return RestApiResponse.error(Http413, $smp3.error())
+      return RestApiResponse.response($smp1.get() & ":" & smp2.get() & ":" &
+                                      toHex(smp3.get()))
 
     const TestVectors = [
       ("/test/1234", ClientResponse(status: 200, data: "1234")),
@@ -184,17 +182,17 @@ suite "REST API server test suite":
         opt6: seq[seq[byte]]) -> RestApiResponse:
 
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       if smp2.isErr():
-        return RestApiResponse.error(412, $smp2.error(), Http412)
+        return RestApiResponse.error(Http412, $smp2.error())
       if smp3.isErr():
-        return RestApiResponse.error(413, $smp3.error(), Http413)
+        return RestApiResponse.error(Http413, $smp3.error())
 
       let o1 =
         if opt1.isSome():
           let res = opt1.get()
           if res.isErr():
-            return RestApiResponse.error(414, $res.error(), Http414)
+            return RestApiResponse.error(Http414, $res.error())
           $res.get()
         else:
           ""
@@ -202,7 +200,7 @@ suite "REST API server test suite":
         if opt2.isSome():
           let res = opt2.get()
           if res.isErr():
-            return RestApiResponse.error(415, $res.error(), Http415)
+            return RestApiResponse.error(Http415, $res.error())
           res.get()
         else:
           ""
@@ -210,23 +208,23 @@ suite "REST API server test suite":
         if opt3.isSome():
           let res = opt3.get()
           if res.isErr():
-            return RestApiResponse.error(416, $res.error(), Http416)
+            return RestApiResponse.error(Http416, $res.error())
           toHex(res.get())
         else:
           ""
       let o4 =
         if opt4.isErr():
-          return RestApiResponse.error(417, $opt4.error(), Http417)
+          return RestApiResponse.error(Http417, $opt4.error())
         else:
           opt4.get().join(",")
       let o5 =
         if opt5.isErr():
-          return RestApiResponse.error(418, $opt5.error(), Http418)
+          return RestApiResponse.error(Http418, $opt5.error())
         else:
           opt5.get().join(",")
       let o6 =
         if opt6.isErr():
-          return RestApiResponse.error(421, $opt6.error(), Http421)
+          return RestApiResponse.error(Http421, $opt6.error())
         else:
           let binres = opt6.get()
           var res = newSeq[string]()
@@ -286,17 +284,17 @@ suite "REST API server test suite":
         contentBody: Option[ContentBody]) -> RestApiResponse:
 
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       if smp2.isErr():
-        return RestApiResponse.error(412, $smp2.error(), Http412)
+        return RestApiResponse.error(Http412, $smp2.error())
       if smp3.isErr():
-        return RestApiResponse.error(413, $smp3.error(), Http413)
+        return RestApiResponse.error(Http413, $smp3.error())
 
       let o1 =
         if opt1.isSome():
           let res = opt1.get()
           if res.isErr():
-            return RestApiResponse.error(414, $res.error(), Http414)
+            return RestApiResponse.error(Http414, $res.error())
           $res.get()
         else:
           ""
@@ -304,7 +302,7 @@ suite "REST API server test suite":
         if opt2.isSome():
           let res = opt2.get()
           if res.isErr():
-            return RestApiResponse.error(415, $res.error(), Http415)
+            return RestApiResponse.error(Http415, $res.error())
           res.get()
         else:
           ""
@@ -312,23 +310,23 @@ suite "REST API server test suite":
         if opt3.isSome():
           let res = opt3.get()
           if res.isErr():
-            return RestApiResponse.error(416, $res.error(), Http416)
+            return RestApiResponse.error(Http416, $res.error())
           toHex(res.get())
         else:
           ""
       let o4 =
         if opt4.isErr():
-          return RestApiResponse.error(417, $opt4.error(), Http417)
+          return RestApiResponse.error(Http417, $opt4.error())
         else:
           opt4.get().join(",")
       let o5 =
         if opt5.isErr():
-          return RestApiResponse.error(418, $opt5.error(), Http418)
+          return RestApiResponse.error(Http418, $opt5.error())
         else:
           opt5.get().join(",")
       let o6 =
         if opt6.isErr():
-          return RestApiResponse.error(421, $opt6.error(), Http421)
+          return RestApiResponse.error(Http421, $opt6.error())
         else:
           let binres = opt6.get()
           var res = newSeq[string]()
@@ -395,19 +393,19 @@ suite "REST API server test suite":
       resp: HttpResponseRef) -> RestApiResponse:
 
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
 
       let o1 =
         if opt1.isSome():
           let res = opt1.get()
           if res.isErr():
-            return RestApiResponse.error(414, $res.error(), Http414)
+            return RestApiResponse.error(Http414, $res.error())
           $res.get()
         else:
           ""
       let o4 =
         if opt4.isErr():
-          return RestApiResponse.error(417, $opt4.error(), Http417)
+          return RestApiResponse.error(Http417, $opt4.error())
         else:
           opt4.get().join(",")
 
@@ -421,27 +419,27 @@ suite "REST API server test suite":
         return RestApiResponse.response("")
       of 3:
         await resp.sendBody(restResp)
-        return RestApiResponse.error(422, "error", Http422)
+        return RestApiResponse.error(Http422, "error")
       else:
-        return RestApiResponse.error(426, "error", Http426)
+        return RestApiResponse.error(Http426, "error")
 
     router.api(MethodPost, "/test/{smp1}") do (
       smp1: int, opt1: Option[int], opt4: seq[int],
       body: Option[ContentBody], resp: HttpResponseRef) -> RestApiResponse:
 
       if smp1.isErr():
-        return RestApiResponse.error(411, $smp1.error(), Http411)
+        return RestApiResponse.error(Http411, $smp1.error())
       let o1 =
         if opt1.isSome():
           let res = opt1.get()
           if res.isErr():
-            return RestApiResponse.error(414, $res.error(), Http414)
+            return RestApiResponse.error(Http414, $res.error())
           $res.get()
         else:
           ""
       let o4 =
         if opt4.isErr():
-          return RestApiResponse.error(417, $opt4.error(), Http417)
+          return RestApiResponse.error(Http417, $opt4.error())
         else:
           opt4.get().join(",")
 
@@ -463,9 +461,9 @@ suite "REST API server test suite":
         return RestApiResponse.response("some result")
       of 3:
         await resp.sendBody(restResp)
-        return RestApiResponse.error(422, "error", Http422)
+        return RestApiResponse.error(Http422, "error")
       else:
-        return RestApiResponse.error(426, "error", Http426)
+        return RestApiResponse.error(Http426, "error")
 
     const PostVectors = [
       (

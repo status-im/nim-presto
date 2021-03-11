@@ -6,7 +6,7 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import std/[options, json]
+import std/[options, json, strutils]
 import chronos, chronos/apps
 import chronicles
 import stew/results
@@ -40,6 +40,11 @@ chronicles.formatIt(Option[ContentBody]):
     "(" & body.contentType & ", " & $len(body.data) & " bytes)"
   else:
     "(None)"
+
+chronicles.expandIt(RestApiError):
+  error_status = $it.status
+  error_content_type = it.contentType
+  error_message = it.message
 
 proc getContentBody(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
   if r.meth notin PostMethods:
@@ -136,10 +141,11 @@ proc processRestRequest(server: RestServerRef,
               else:
                 debug "Received error response from handler",
                       meth = $request.meth, peer = $request.remoteAddress(),
-                      uri = $request.uri, error_status = $error.status,
-                      error_code = error.code, error_message = error.message,
-                      error_stacktrace = error.stacktrace
-                return await request.respond(error.status, error.getMessage())
+                      uri = $request.uri, error
+                let headers = HttpTable.init([("Content-Type",
+                                               error.contentType)])
+                return await request.respond(error.status, error.message,
+                                             headers)
           else:
             debug "Response was sent in request handler", meth = $request.meth,
                   peer = $request.remoteAddress(), uri = $request.uri,
@@ -179,6 +185,7 @@ proc processRestRequest(server: RestServerRef,
 proc new*(t: typedesc[RestServerRef],
           router: RestRouter,
           address: TransportAddress,
+          serverIdent: string = "",
           serverFlags = {HttpServerFlags.NotifyDisconnect},
           socketFlags: set[ServerFlags] = {ReuseAddr},
           secureFlags: set[TLSFlags] = {},
@@ -197,7 +204,7 @@ proc new*(t: typedesc[RestServerRef],
     processRestRequest(server, rf)
 
   let sres = HttpServerRef.new(address, processCallback, serverFlags,
-                               socketFlags, serverUri,
+                               socketFlags, serverUri, serverIdent,
                                tlsPrivateKey, tlsCertificate,
                                secureFlags, maxConnections, backlogSize,
                                bufferSize, httpHeadersTimeout, maxHeadersSize,
