@@ -7,12 +7,12 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import std/[options, json, strutils]
-import chronos, chronos/apps
+import chronos, chronos/apps/http/httpserver
 import chronicles
 import stew/results
 import route, common, segpath
 
-export chronos, apps
+export chronos, httpserver
 
 type
   RestServer* = object of RootObj
@@ -188,10 +188,7 @@ proc new*(t: typedesc[RestServerRef],
           serverIdent: string = "",
           serverFlags = {HttpServerFlags.NotifyDisconnect},
           socketFlags: set[ServerFlags] = {ReuseAddr},
-          secureFlags: set[TLSFlags] = {},
           serverUri = Uri(),
-          tlsPrivateKey: TLSPrivateKey = nil,
-          tlsCertificate: TLSCertificate = nil,
           maxConnections: int = -1,
           backlogSize: int = 100,
           bufferSize: int = 4096,
@@ -205,9 +202,8 @@ proc new*(t: typedesc[RestServerRef],
 
   let sres = HttpServerRef.new(address, processCallback, serverFlags,
                                socketFlags, serverUri, serverIdent,
-                               tlsPrivateKey, tlsCertificate,
-                               secureFlags, maxConnections, backlogSize,
-                               bufferSize, httpHeadersTimeout, maxHeadersSize,
+                               maxConnections, bufferSize, backlogSize,
+                               httpHeadersTimeout, maxHeadersSize,
                                maxRequestBodySize)
   if sres.isOk():
     server.server = sres.get()
