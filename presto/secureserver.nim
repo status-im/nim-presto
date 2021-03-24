@@ -6,22 +6,21 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import std/[options, json, strutils]
-import chronos, chronos/apps/http/httpserver
+import std/[options, strutils]
+import chronos, chronos/apps/http/shttpserver
 import chronicles
 import stew/results
 import route, common, segpath, servercommon
-
-export options, chronos, httpserver, servercommon
+export options, chronos, shttpserver, servercommon
 
 type
-  RestServer* = object of RootObj
-    server*: HttpServerRef
+  SecureRestServer* = object of RootObj
+    server*: SecureHttpServerRef
     router*: RestRouter
 
-  RestServerRef* = ref RestServer
+  SecureRestServerRef* = ref SecureRestServer
 
-proc getContentBody(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
+proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
   else:
@@ -37,7 +36,7 @@ proc getContentBody(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
     let cbody = ContentBody(contentType: cres.get(), data: data)
     return some[ContentBody](cbody)
 
-proc processRestRequest(server: RestServerRef,
+proc processRestRequest(server: SecureRestServerRef,
                         rf: RequestFence): Future[HttpResponseRef] {.
      gcsafe, async.} =
   if rf.isOk():
@@ -157,10 +156,13 @@ proc processRestRequest(server: RestServerRef,
 
     return dumbResponse()
 
-proc new*(t: typedesc[RestServerRef],
+proc new*(t: typedesc[SecureRestServerRef],
           router: RestRouter,
           address: TransportAddress,
+          tlsPrivateKey: TLSPrivateKey,
+          tlsCertificate: TLSCertificate,
           serverIdent: string = "",
+          secureFlags: set[TLSFlags] = {},
           serverFlags = {HttpServerFlags.NotifyDisconnect},
           socketFlags: set[ServerFlags] = {ReuseAddr},
           serverUri = Uri(),
@@ -169,24 +171,26 @@ proc new*(t: typedesc[RestServerRef],
           bufferSize: int = 4096,
           httpHeadersTimeout = 10.seconds,
           maxHeadersSize: int = 8192,
-          maxRequestBodySize: int = 1_048_576): RestResult[RestServerRef] =
-  var server = RestServerRef(router: router)
+          maxRequestBodySize: int = 1_048_576
+         ): RestResult[SecureRestServerRef] =
+  var server = SecureRestServerRef(router: router)
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
     processRestRequest(server, rf)
 
-  let sres = HttpServerRef.new(address, processCallback, serverFlags,
-                               socketFlags, serverUri, serverIdent,
-                               maxConnections, bufferSize, backlogSize,
-                               httpHeadersTimeout, maxHeadersSize,
-                               maxRequestBodySize)
+  let sres = SecureHttpServerRef.new(address, processCallback, tlsPrivateKey,
+                                     tlsCertificate, serverFlags, socketFlags,
+                                     serverUri, serverIdent, secureFlags,
+                                     maxConnections, bufferSize, backlogSize,
+                                     httpHeadersTimeout, maxHeadersSize,
+                                     maxRequestBodySize)
   if sres.isOk():
     server.server = sres.get()
     ok(server)
   else:
-    err("Could not create HTTP server instance")
+    err("Could not create HTTPS server instance")
 
-proc state*(rs: RestServerRef): RestServerState {.raises: [Defect].} =
+proc state*(rs: SecureRestServerRef): RestServerState {.raises: [Defect].} =
   ## Returns current REST server's state.
   case rs.server.state
   of HttpServerState.ServerClosed:
@@ -196,25 +200,25 @@ proc state*(rs: RestServerRef): RestServerState {.raises: [Defect].} =
   of HttpServerState.ServerRunning:
     RestServerState.Running
 
-proc start*(rs: RestServerRef) =
+proc start*(rs: SecureRestServerRef) =
   ## Starts REST server.
   rs.server.start()
-  notice "REST service started", address = $rs.server.address
+  notice "Secure REST service started", address = $rs.server.address
 
-proc stop*(rs: RestServerRef) {.async.} =
+proc stop*(rs: SecureRestServerRef) {.async.} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
-  notice "REST service stopped", address = $rs.server.address
+  notice "Secure REST service stopped", address = $rs.server.address
 
-proc drop*(rs: RestServerRef): Future[void] =
+proc drop*(rs: SecureRestServerRef): Future[void] =
   ## Drop all pending connections.
   rs.server.drop()
 
-proc closeWait*(rs: RestServerRef) {.async.} =
+proc closeWait*(rs: SecureRestServerRef) {.async.} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
-  notice "REST service closed", address = $rs.server.address
+  notice "Secure REST service closed", address = $rs.server.address
 
-proc join*(rs: RestServerRef): Future[void] =
+proc join*(rs: SecureRestServerRef): Future[void] =
   ## Wait until REST server will not be closed.
   rs.server.join()
