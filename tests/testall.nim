@@ -5,4 +5,4 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import testsegpath, testroute, testserver, testsecureserver
+import testbtrees, testsegpath, testroute, testserver, testsecureserver

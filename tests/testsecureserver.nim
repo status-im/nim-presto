@@ -132,7 +132,7 @@ template asyncTest*(name: string, body: untyped): untyped =
         body
     )())
 
-suite "REST API server test suite":
+suite "Secure REST API server test suite":
   let serverAddress = initTAddress("127.0.0.1:30180")
   asyncTest "Responses test":
     var router = RestRouter.init(testValidate)

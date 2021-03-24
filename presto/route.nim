@@ -101,16 +101,15 @@ proc makeProcName(m, s: string): string =
     case c
     of {'/', '{', '_'}:
       toUpper = true
-      inc(k, 1)
     of Letters + Digits:
       if toUpper:
         res.add(toUpperAscii(c))
         toUpper = false
       else:
         res.add(c)
-      inc(k, 1)
     else:
-      inc(k, 1)
+      discard
+    inc(k, 1)
   res
 
 proc getRestReturnType(params: NimNode): NimNode =
@@ -351,7 +350,8 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
       `optDecoder`
       `respDecoder`
       `bodyDecoder`
-      `procBody`
+      block:
+        `procBody`
 
     `router`.addRoute(`methIdent`, `path`, `doMain`)
 
