@@ -6,19 +6,19 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos, chronos/apps
+import chronos, chronos/apps/http/[httpcommon, httptable]
 import std/[macros, options]
 import stew/bitops2
 import btrees
 import common, segpath
 
-export chronos, apps, options, common
+export chronos, options, common, httpcommon, httptable
 
 type
   RestApiCallback* = proc(request: HttpRequestRef, pathParams: HttpTable,
                           queryParams: HttpTable,
                           body: Option[ContentBody]): Future[RestApiResponse] {.
-                     gcsafe.}
+                     raises: [Defect], gcsafe.}
   RestRoute* = object
     requestPath*: SegmentedPath
     routePath*: SegmentedPath
@@ -344,7 +344,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
   res.add quote do:
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
                   `queryParams`: HttpTable, `bodyParam`: Option[ContentBody]
-                 ): Future[RestApiResponse] {.async.} =
+                 ): Future[RestApiResponse] {.raises: [Defect], async.} =
 
       `pathDecoder`
       `optDecoder`
