@@ -1,6 +1,8 @@
 import std/[random, tables, unittest]
 import ../presto/btrees
 
+when defined(nimHasUsed): {.used.}
+
 suite "B-Tree test suite":
   test "B-Tree original standard library test":
     proc main() =

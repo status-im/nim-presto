@@ -8,6 +8,7 @@
 #              MIT license (LICENSE-MIT)
 import chronicles
 import common
+export chronicles
 
 chronicles.formatIt(HttpTable):
   var res = newSeq[string]()
