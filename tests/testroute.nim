@@ -345,6 +345,22 @@ suite "REST API router & macro tests":
     router.addRoute(MethodPost, "/unique/path/{pattern1}", apiCallback)
     router.addRoute(MethodPost, "/unique/path/{pattern2}", apiCallback)
 
+    # Use HTTP method GET and redirect
+    router.addRedirect(MethodGet, "/redirect/path/1", "/unique/path/1")
+    router.addRedirect(MethodGet, "/redirect/path/2", "/unique/path/2")
+    router.addRedirect(MethodGet, "/redirect/path/{pattern1}",
+                                  "/unique/path/{pattern1}")
+    router.addRedirect(MethodGet, "/redirect/path/{pattern2}",
+                                  "/unique/path/{pattern2")
+
+    # Use HTTP method POST and redirect
+    router.addRedirect(MethodPost, "/redirect/path/1", "/unique/path/1")
+    router.addRedirect(MethodPost, "/redirect/path/2", "/unique/path/2")
+    router.addRedirect(MethodPost, "/redirect/path/{pattern1}",
+                                   "/unique/path/{pattern1}")
+    router.addRedirect(MethodPost, "/redirect/path/{pattern2}",
+                                   "/unique/path/{pattern2")
+
     expect AssertionError:
       router.addRoute(MethodGet, "/unique/path/1", apiCallback)
     expect AssertionError:
@@ -355,6 +371,15 @@ suite "REST API router & macro tests":
       router.addRoute(MethodGet, "/unique/path/{pattern2}", apiCallback)
 
     expect AssertionError:
+      router.addRoute(MethodGet, "/redirect/path/1", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodGet, "/redirect/path/2", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodGet, "/redirect/path/{pattern1}", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodGet, "/redirect/path/{pattern2}", apiCallback)
+
+    expect AssertionError:
       router.addRoute(MethodPost, "/unique/path/1", apiCallback)
     expect AssertionError:
       router.addRoute(MethodPost, "/unique/path/2", apiCallback)
@@ -362,3 +387,164 @@ suite "REST API router & macro tests":
       router.addRoute(MethodPost, "/unique/path/{pattern1}", apiCallback)
     expect AssertionError:
       router.addRoute(MethodPost, "/unique/path/{pattern2}", apiCallback)
+
+    expect AssertionError:
+      router.addRoute(MethodPost, "/redirect/path/1", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodPost, "/redirect/path/2", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodPost, "/redirect/path/{pattern1}", apiCallback)
+    expect AssertionError:
+      router.addRoute(MethodPost, "/redirect/path/{pattern2}", apiCallback)
+
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/unique/path/1", "/unique/1")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/unique/path/2", "/unique/2")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/unique/path/{pattern1}",
+                                    "/unique/{pattern1}")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/unique/path/{pattern2}",
+                                    "/unique/{pattern2}")
+
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/redirect/path/1", "/another/1")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/redirect/path/2", "/another/2")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/redirect/path/{pattern1}",
+                                    "/another/{pattern1}")
+    expect AssertionError:
+      router.addRedirect(MethodGet, "/redirect/path/{pattern2}",
+                                    "/another/{pattern2}")
+
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/unique/path/1", "/unique/1")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/unique/path/2", "/unique/2")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/unique/path/{pattern1}",
+                                     "/unique/{pattern1}")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/unique/path/{pattern2}",
+                                     "/unique/{pattern2}")
+
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/redirect/path/1", "/another/1")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/redirect/path/2", "/another/2")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/redirect/path/{pattern1}",
+                                     "/another/{pattern1}")
+    expect AssertionError:
+      router.addRedirect(MethodPost, "/redirect/path/{pattern2}",
+                                     "/another/{pattern2}")
+
+  test "Redirection test":
+    var router = RestRouter.init(testValidate)
+
+    router.api(MethodGet, "/test/empty/1") do (
+      ) -> RestApiResponse:
+      return ok(ContentBody(contentType: "test/test", data: "ok-1".toBytes()))
+    router.api(MethodGet, "/test/empty/p1/p2/p3/1") do (
+      ) -> RestApiResponse:
+      return ok(ContentBody(contentType: "test/test", data: "ok-2".toBytes()))
+    router.api(MethodGet, "/test/empty/p1/p2/p3/p5/p6/p7/p8/p9/1") do (
+      ) -> RestApiResponse:
+      return ok(ContentBody(contentType: "test/test", data: "ok-3".toBytes()))
+    router.api(MethodGet, "/test/basic/path1/{smp1}") do (
+      smp1: int) -> RestApiResponse:
+      let s1 = smp1.get()
+      if s1 == 999999:
+        return ok(ContentBody(contentType: "test/test",
+                              data: "ok-1".toBytes()))
+    router.api(MethodGet, "/test/basic/path1/path2/{smp1}/{smp2}") do (
+      smp1: int, smp2: string) -> RestApiResponse:
+      let s1 = smp1.get()
+      let s2 = smp2.get()
+      if (s1 == 999999) and (s2 == "string1"):
+        return ok(ContentBody(contentType: "test/test",
+                              data: "ok-2".toBytes()))
+    router.api(MethodGet,
+               "/test/basic/path1/path2/path3/{smp1}/{smp2}/{smp3}") do (
+      smp1: int, smp2: string, smp3: seq[byte]) -> RestApiResponse:
+      let s1 = smp1.get()
+      let s2 = smp2.get()
+      let s3 = smp3.get()
+      if (s1 == 999999) and (s2 == "string1") and
+         (bytesToString(s3) == "bytes1"):
+        return ok(ContentBody(contentType: "test/test",
+                              data: "ok-3".toBytes()))
+
+    router.redirect(MethodGet, "/api/1", "/test/empty/1")
+    router.redirect(MethodGet, "/api/2", "/test/empty/p1/p2/p3/1")
+    router.redirect(MethodGet, "/api/3",
+                    "/test/empty/p1/p2/p3/p5/p6/p7/p8/p9/1")
+    router.redirect(MethodGet, "/api/basic/{smp1}",
+                    "/test/basic/path1/{smp1}")
+    router.redirect(MethodGet, "/api/basic/{smp1}/{smp2}",
+                    "/test/basic/path1/path2/{smp1}/{smp2}")
+    router.redirect(MethodGet, "/api/basic/{smp1}/{smp2}/{smp3}",
+                    "/test/basic/path1/path2/path3/{smp1}/{smp2}/{smp3}")
+    # Patterns with mixed order
+    router.redirect(MethodGet, "/api/basic/{smp3}/{smp1}/{smp2}",
+                    "/test/basic/path1/path2/path3/{smp1}/{smp2}/{smp3}")
+    router.redirect(MethodGet, "/api/basic/{smp2}/{smp3}/{smp1}",
+                    "/test/basic/path1/path2/path3/{smp1}/{smp2}/{smp3}")
+    router.redirect(MethodGet, "/api/basic/{smp2}/{smp1}/{smp3}",
+                    "/test/basic/path1/path2/path3/{smp1}/{smp2}/{smp3}")
+    router.redirect(MethodGet, "/api/basic/{smp2}/p1/p2/p3/{smp1}",
+                    "/test/basic/path1/path2/{smp1}/{smp2}")
+    router.redirect(MethodGet, "/api/basic/{smp2}/p1/p2/p3/p4/p5/p6/{smp1}",
+                    "/test/basic/path1/path2/{smp1}/{smp2}")
+    router.redirect(MethodGet,
+                    "/api/basic/{smp2}/p1/p2/p3/p4/p5/p6/p7/{smp1}/p8",
+                    "/test/basic/path1/path2/{smp1}/{smp2}")
+
+    let r1 = router.sendMockRequest(MethodGet, "http://l.to/api/1")
+    let r2 = router.sendMockRequest(MethodGet, "http://l.to/api/2")
+    let r3 = router.sendMockRequest(MethodGet, "http://l.to/api/3")
+    let r4 = router.sendMockRequest(MethodGet,
+                                    "http://l.to/api/basic/999999")
+    let r5 = router.sendMockRequest(MethodGet,
+                                    "http://l.to/api/basic/999999/string1")
+    let r6 = router.sendMockRequest(MethodGet,
+                          "http://l.to/api/basic/999999/string1/0x627974657331")
+    let r7 = router.sendMockRequest(MethodGet,
+                          "http://l.to/api/basic/0x627974657331/999999/string1")
+    let r8 = router.sendMockRequest(MethodGet,
+                          "http://l.to/api/basic/string1/0x627974657331/999999")
+    let r9 = router.sendMockRequest(MethodGet,
+                          "http://l.to/api/basic/string1/999999/0x627974657331")
+    let r10 = router.sendMockRequest(MethodGet,
+                                "http://l.to/api/basic/string1/p1/p2/p3/999999")
+    let r11 = router.sendMockRequest(MethodGet,
+                       "http://l.to/api/basic/string1/p1/p2/p3/p4/p5/p6/999999")
+    let r12 = router.sendMockRequest(MethodGet,
+                 "http://l.to/api/basic/string1/p1/p2/p3/p4/p5/p6/p7/999999/p8")
+    check:
+      r1.isOk()
+      r2.isOk()
+      r3.isOk()
+      r4.isOk()
+      r5.isOk()
+      r6.isOk()
+      r7.isOk()
+      r8.isOk()
+      r9.isOk()
+      r10.isOk()
+      r11.isOk()
+      r12.isOk()
+      bytesToString(r1.get().data) == "ok-1"
+      bytesToString(r2.get().data) == "ok-2"
+      bytesToString(r3.get().data) == "ok-3"
+      bytesToString(r4.get().data) == "ok-1"
+      bytesToString(r5.get().data) == "ok-2"
+      bytesToString(r6.get().data) == "ok-3"
+      bytesToString(r7.get().data) == "ok-3"
+      bytesToString(r8.get().data) == "ok-3"
+      bytesToString(r9.get().data) == "ok-3"
+      bytesToString(r10.get().data) == "ok-2"
+      bytesToString(r11.get().data) == "ok-2"
+      bytesToString(r12.get().data) == "ok-2"

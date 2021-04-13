@@ -45,6 +45,18 @@ proc getOrDefault*[Key, Val](b: BTree[Key, Val], key: Key): Val =
   for j in 0..<x.entries:
     if eq(key, x.keys[j]): return x.vals[j]
 
+proc getOrDefault*[Key, Val](b: BTree[Key, Val], key: Key, default: Val): Val =
+  var x = b.root
+  while x.isInternal:
+    for j in 0..<x.entries:
+      if j+1 == x.entries or less(key, x.keys[j+1]):
+        x = x.links[j]
+        break
+  assert(not x.isInternal)
+  for j in 0..<x.entries:
+    if eq(key, x.keys[j]): return x.vals[j]
+  return default
+
 proc contains*[Key, Val](b: BTree[Key, Val], key: Key): bool =
   var x = b.root
   while x.isInternal:

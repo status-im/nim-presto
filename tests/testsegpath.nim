@@ -53,3 +53,14 @@ suite "SegmentedPath test suite":
       check:
         len(path.data) == (i + 2)
         path.getPatterns() == names
+
+  test "Non-unique patterns test":
+    const NonUniqueVectors = [
+      "/{item1}/{item2}/{item1}",
+      "/{i1}/{i1}",
+      "/{a}/{b}/{a}"
+    ]
+    for item in NonUniqueVectors:
+      expect AssertionError:
+        let path {.used.} = SegmentedPath.init(HttpMethod.MethodGet, item,
+                                               validate)
