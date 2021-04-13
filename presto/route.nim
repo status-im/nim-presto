@@ -18,15 +18,25 @@ type
   RestApiCallback* = proc(request: HttpRequestRef, pathParams: HttpTable,
                           queryParams: HttpTable,
                           body: Option[ContentBody]): Future[RestApiResponse] {.
-                     raises: [Defect], gcsafe.}
+                       raises: [Defect], gcsafe.}
+
+  RestRouteKind* {.pure.} = enum
+    None, Handler, Redirect
+
   RestRoute* = object
     requestPath*: SegmentedPath
     routePath*: SegmentedPath
     callback*: RestApiCallback
 
   RestRouteItem* = object
+    case kind*: RestRouteKind
+    of RestRouteKind.None:
+      discard
+    of RestRouteKind.Handler:
+      callback: RestApiCallback
+    of RestRouteKind.Redirect:
+      redirectPath*: SegmentedPath
     path: SegmentedPath
-    callback: RestApiCallback
 
   RestRouter* = object
     patternCallback*: PatternCallback
@@ -42,18 +52,47 @@ proc init*(t: typedesc[RestRouter],
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
                handler: RestApiCallback) {.raises: [Defect].} =
   let spath = SegmentedPath.init(request, path, rr.patternCallback)
-  let route = rr.routes.getOrDefault(spath)
-  doAssert(isNil(route.callback), "The route is already in the routing table")
-  rr.routes.add(spath, RestRouteItem(path: spath, callback: handler))
+  let route = rr.routes.getOrDefault(spath,
+                                     RestRouteItem(kind: RestRouteKind.None))
+  case route.kind
+  of RestRouteKind.None:
+    let item = RestRouteItem(kind: RestRouteKind.Handler,
+                           path: spath, callback: handler)
+    rr.routes.add(spath, item)
+  else:
+    raiseAssert("The route is already in the routing table")
+
+proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
+                  dstPath: string) {.raises: [Defect].} =
+  let spath = SegmentedPath.init(request, srcPath, rr.patternCallback)
+  let dpath = SegmentedPath.init(request, dstPath, rr.patternCallback)
+  let route = rr.routes.getOrDefault(spath,
+                                     RestRouteItem(kind: RestRouteKind.None))
+  case route.kind
+  of RestRouteKind.None:
+    let item = RestRouteItem(kind: RestRouteKind.Redirect,
+                             path: spath, redirectPath: dpath)
+    rr.routes.add(spath, item)
+  else:
+    raiseAssert("The route is already in the routing table")
 
 proc getRoute*(rr: RestRouter,
                spath: SegmentedPath): Option[RestRoute] {.raises: [Defect].} =
-  let route = rr.routes.getOrDefault(spath)
-  if isNil(route.callback):
-    none[RestRoute]()
-  else:
-    some[RestRoute](RestRoute(requestPath: spath, routePath: route.path,
-                              callback: route.callback))
+  var path = spath
+  while true:
+    let route = rr.routes.getOrDefault(path,
+                                       RestRouteItem(kind: RestRouteKind.None))
+    case route.kind
+    of RestRouteKind.None:
+      return none[RestRoute]()
+    of RestRouteKind.Handler:
+      # Route handler was found
+      let item = RestRoute(requestPath: path, routePath: route.path,
+                           callback: route.callback)
+      return some(item)
+    of RestRouteKind.Redirect:
+      # Route redirection was found, so we perform path transformation
+      path = rewritePath(route.path, route.redirectPath, path)
 
 iterator params*(route: RestRoute): string {.raises: [Defect].} =
   var pats = route.routePath.patterns
@@ -167,6 +206,29 @@ proc getOptionType(typeNode: NimNode): NimNode =
 proc isPathArg(typeNode: NimNode): bool =
   isBytesArg(typeNode) or (not(isOptionalArg(typeNode)) and
                            not(isSequenceArg(typeNode)))
+
+macro redirect*(router: RestRouter, meth: static[HttpMethod],
+                fromPath: static[string], toPath: static[string]): untyped =
+  ## Define REST API endpoint which redirects request to different compatible
+  ## endpoint ("/somecall" will be redirected to "/api/somecall").
+  let
+    srcPathStr = $fromPath
+    dstPathStr = $toPath
+    srcSegPath = SegmentedPath.init(meth, srcPathStr, nil)
+    dstSegPath = SegmentedPath.init(meth, dstPathStr, nil)
+    # Not sure about this, it creates HttpMethod(int).
+    methIdent = newLit(meth)
+
+  if not(isEqual(srcSegPath, dstSegPath)):
+    error("Source and destination path patterns should be equal", router)
+
+  var res = newStmtList()
+  res.add quote do:
+    `router`.addRedirect(`methIdent`, `fromPath`, `toPath`)
+
+  when defined(nimDumpRestAPI):
+    echo "\n", path, ": ", repr(res)
+  return res
 
 macro api*(router: RestRouter, meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
