@@ -64,3 +64,48 @@ suite "SegmentedPath test suite":
       expect AssertionError:
         let path {.used.} = SegmentedPath.init(HttpMethod.MethodGet, item,
                                                validate)
+  test "createPath() test":
+    const GoodVectors = [
+      (
+        "/{item1}/{item2}/data/path",
+        @[("item1", "path1"), ("item2", "path2")],
+        "/path1/path2/data/path"
+      ),
+      (
+        "/data/path/{epoch}/{slot}",
+        @[("epoch", "1"), ("slot", "2")],
+        "/data/path/1/2"
+      ),
+      (
+        "/data/path",
+        @[],
+        "/data/path"
+      ),
+      ("", @[], "")
+    ]
+
+    const BadVectors = [
+      (
+        "/{item1}/{item2}/{item1}",
+        @[("item1", "path1"), ("item2", "path2")]
+      ),
+      (
+        "/{item1}/data",
+        @[("item1", "path1"), ("item2", "path2")]
+      ),
+      (
+        "/{item1}/{item2}/data",
+        @[("item1", "path1")]
+      ),
+      (
+        "/{}/data",
+        @[("", "path1")]
+      )
+    ]
+
+    for item in GoodVectors:
+      check createPath(item[0], item[1]) == item[2]
+
+    for item in BadVectors:
+      expect AssertionError:
+        let path {.used.} = createPath(item[0], item[1])

@@ -222,5 +222,40 @@ proc init*(st: typedesc[SegmentedPath], request: HttpMethod,
       $request & "/" & upath
   SegmentedPath.init(path, patternCb)
 
+proc createPath*(upath: string, values: openarray[KeyValueTuple]): string =
+  var data: seq[string]
+  var counter = 0
+  var valuesCount = 0
+  var patterns: seq[string]
+  for item in upath.split("/"):
+    doAssert(counter < 64, "Path has too many segments (more then 64)")
+    let value =
+      if len(item) >= 2:
+        if item[0] == '{' and item[^1] == '}':
+          doAssert(len(item) > 2, "Patterns with empty names are not allowed")
+          if item in patterns:
+            raiseAssert "Only unique patterns allowed in path"
+          else:
+            patterns.add(item)
+          let searchKey = item[1 .. ^2]
+          var res = ""
+          for item in values:
+            if item.key == searchKey:
+              res = item.value
+          if len(res) == 0:
+            raiseAssert "Pattern key has not been found in values array"
+          inc(valuesCount)
+          res
+        else:
+          item
+      else:
+        item
+    data.add(encodeUrl(value, true))
+    inc(counter)
+  if len(values) != valuesCount:
+    raiseAssert(
+      "Size of values array do not equal to number of patterns in path")
+  data.join("/")
+
 proc `$`*(seg: SegmentedPath): string =
   seg.data.join("/")

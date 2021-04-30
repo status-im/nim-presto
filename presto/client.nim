@@ -78,11 +78,13 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
 
 proc raiseRestEncodingError*(field, message: cstring) {.
      noreturn, noinline.} =
-  let exc = newException(RestEncodingError, message)
+  let exc = newException(RestEncodingError, $message)
   exc.field = field
   raise exc
 
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
+  let parameters = prc.findChild(it.kind == nnkFormalParams)
+
   if prc.kind notin {nnkProcDef, nnkLambda, nnkMethodDef, nnkDo}:
     error("Cannot transform this node kind into an async proc." &
           " proc/method definition or lambda node expected.")
@@ -102,11 +104,39 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   let spath = SegmentedPath.init(HttpMethod.MethodGet, endpoint, nil)
   var patterns = spath.getPatterns()
 
-  echo patterns
+  let (bodyArgument, optionalArguments, pathArguments) =
+    block:
+      var bodyRes: Option[tuple[name, ntype: NimNode]]
+      var optionalRes: seq[tuple[name, ntype: NimNode]]
+      var pathRes: seq[tuple[name, ntype: NimNode]]
+      for paramName, paramType in parameters.paramsIter():
+        let index = patterns.find($paramName)
+        if index >= 0:
+          if isOptionalArg(paramType):
+            error("Path argument could not be of Option[T] type",
+                  paramName)
+          if isSequenceArg(paramType) and not(isBytesArg(paramType)):
+            error("Path argument could not be of iterable type")
+          patterns.delete(index)
+          pathRes.add((paramName, paramType))
+        else:
+          let name = $paramName
+          if name.startsWith("body"):
+            if bodyRes.isSome():
+              error("More then one body argument (starts with `body`) present",
+                    paramName)
+            bodyRes = some((paramName, paramType))
+          else:
+            optionalRes.add((paramName, paramType))
+      (bodyRes, optionalRes, pathRes)
+
+  if len(patterns) != 0:
+    error("Some of the arguments that are present in the path are missing: [" &
+          patterns.join(", ") & "]", parameters)
 
 
 
-  # echo treeRepr prc
+  echo treeRepr prc
   # echo "endpoint = ", prc.getEndpoint()
   # echo treeRepr prc.getMethod()
 
@@ -129,11 +159,6 @@ template ab(f, v) =
   else:
     ""
 
-
-
-proc raiseTLSStreamProtocolError[T](message: T) {.noreturn, noinline.} =
-  raise newTLSStreamProtocolImpl(message)
-
 macro rest*(prc: untyped): untyped =
   let res =
     if prc.kind == nnkStmtList:
@@ -147,5 +172,5 @@ macro rest*(prc: untyped): untyped =
     echo repr res
   res
 
-proc someProc() {.rest, endpoint: "/api/eth/{epoch}".} =
+proc someProc(epoch: seq[byte], data: int) {.rest, endpoint: "/api/eth/{epoch}".} =
   discard
