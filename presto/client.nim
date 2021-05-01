@@ -8,7 +8,7 @@
 #              MIT license (LICENSE-MIT)
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import httputils
-import std/[macros, options, uri]
+import std/[macros, options, uri, sequtils]
 import segpath, common, macrocommon
 export httpclient, httptable, httpcommon, options, httputils
 
@@ -76,14 +76,28 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
     if node.kind == nnkIdent and node.strVal == "async":
       return node
 
-proc raiseRestEncodingError*(field, message: cstring) {.
+proc raiseRestEncodingStringError*(field: static string) {.
      noreturn, noinline.} =
-  let exc = newException(RestEncodingError, $message)
+  let exc = newException(RestEncodingError, "Unable to encode object to string")
   exc.field = field
   raise exc
 
+proc raiseRestEncodingBytesError*(field: static string) {.
+     noreturn, noinline.} =
+  let exc = newException(RestEncodingError, "Unable to encode object to bytes")
+  exc.field = field
+  raise exc
+
+template ac() =
+  createPath(path, [("key", "value"), ("key2", "value2")])
+
+proc newArrayNode(nodes: openarray[NimNode]): NimNode =
+  newTree(nnkBracketExpr, @nodes)
+
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   let parameters = prc.findChild(it.kind == nnkFormalParams)
+  let requestPath = newIdentNode("requestPath")
+  var statements = newStmtList()
 
   if prc.kind notin {nnkProcDef, nnkLambda, nnkMethodDef, nnkDo}:
     error("Cannot transform this node kind into an async proc." &
@@ -106,10 +120,11 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
 
   let (bodyArgument, optionalArguments, pathArguments) =
     block:
-      var bodyRes: Option[tuple[name, ntype: NimNode]]
-      var optionalRes: seq[tuple[name, ntype: NimNode]]
-      var pathRes: seq[tuple[name, ntype: NimNode]]
+      var bodyRes: Option[tuple[name, ntype, ename, literal: NimNode]]
+      var optionalRes: seq[tuple[name, ntype, ename, literal: NimNode]]
+      var pathRes: seq[tuple[name, ntype, ename, literal: NimNode]]
       for paramName, paramType in parameters.paramsIter():
+        let literal = newStrLitNode($paramName)
         let index = patterns.find($paramName)
         if index >= 0:
           if isOptionalArg(paramType):
@@ -118,29 +133,128 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           if isSequenceArg(paramType) and not(isBytesArg(paramType)):
             error("Path argument could not be of iterable type")
           patterns.delete(index)
-          pathRes.add((paramName, paramType))
+          let decodedName = newIdentNode($paramName & "PathEncoded")
+          pathRes.add((paramName, paramType, decodedName, literal))
         else:
           let name = $paramName
           if name.startsWith("body"):
             if bodyRes.isSome():
               error("More then one body argument (starts with `body`) present",
                     paramName)
-            bodyRes = some((paramName, paramType))
+            let decodedName = newIdentNode($paramName & "BodyEncoded")
+            bodyRes = some((paramName, paramType, decodedName, literal))
           else:
-            optionalRes.add((paramName, paramType))
+            let decodedName = newIdentNode($paramName & "OptEncoded")
+            optionalRes.add((paramName, paramType, decodedName, literal))
       (bodyRes, optionalRes, pathRes)
 
   if len(patterns) != 0:
     error("Some of the arguments that are present in the path are missing: [" &
           patterns.join(", ") & "]", parameters)
 
+  for item in pathArguments:
+    let paramName = item.name
+    let paramLiteral = item.literal
+    let encodedName = item.ename
+
+    statements.add quote do:
+      let `encodedName` =
+        block:
+          let res = encodeString(`paramName`)
+          if res.isErr():
+            raiseRestEncodingStringError(`paramLiteral`)
+          encodeUrl(res.get(), true)
+
+  for item in optionalArguments:
+    let paramName = item.name
+    let paramLiteral = item.literal
+    let encodedName = item.ename
+
+    if isOptionalArg(item.ntype):
+      statements.add quote do:
+        let `encodedName` =
+          block:
+            if `paramName`.isSome():
+              let res = encodeString(`paramName`.get())
+              if res.isErr():
+                raiseRestEncodingStringError(`paramLiteral`)
+              var sres = `paramLiteral`
+              sres.add('=')
+              sres.add(encodeUrl(res.get(), true))
+              sres
+            else:
+              ""
+    elif isSequenceArg(item.ntype):
+      if isBytesArg(item.ntype):
+        statements.add quote do:
+          let `encodedName` =
+            block:
+              let res = encodeString(`paramName`)
+              if res.isErr():
+                raiseRestEncodingStringError(`paramLiteral`)
+              var sres = `paramLiteral`
+              sres.add('=')
+              sres.add(encodeUrl(res.get(), true))
+              sres
+      else:
+        statements.add quote do:
+          let `encodedName` =
+            block:
+              var res: seq[string]
+              for item in `paramName`.items():
+                let res = encodeString(item)
+                if res.isErr():
+                  raiseRestEncodingStringError(`paramLiteral`)
+                var sres = `paramLiteral`
+                sres.add('=')
+                sres.add(encodeUrl(res.get(), true))
+                res.add(sres)
+              res.join("&")
+    else:
+      statements.add quote do:
+        let `encodedName` =
+          block:
+            let res = encodeString(`paramName`)
+            if res.isErr():
+              raiseRestEncodingStringError(`paramLiteral`)
+            var sres = `paramLiteral`
+            sres.add('=')
+            sres.add(encodeUrl(res.get(), true))
+            sres
+
+    if bodyArgument.isSome():
+      let paramName = item.name
+      let paramLiteral = item.literal
+      let encodedName = item.ename
+
+      statements.add quote do:
+        let `encodedName` =
+          block:
+            let res = encodeBytes(`paramName`, contentType)
+            if res.isErr():
+              raiseRestEncodingBytesError(`paramLiteral`)
+            res.get()
+
+    if len(pathArguments) > 0:
+      echo repr pathArguments
+      let pathLiteral = newStrLitNode(endpoint)
+      let arrayItems = newArrayNode(
+        pathArguments.mapIt(newPar(it.literal, it.ename))
+      )
+      statements.add quote do:
+        let `requestPath` = createPath(`pathLiteral`, `arrayItems`)
+    else:
+      let pathLiteral = newStrLitNode(endpoint)
+      statements.add quote do:
+        let `requestPath` = `pathLiteral`
 
 
-  echo treeRepr prc
+  # echo treeRepr getAst(ac())
   # echo "endpoint = ", prc.getEndpoint()
   # echo treeRepr prc.getMethod()
 
   # let prcName = prc.name.getName
+  echo repr statements
   newStmtList()
 
 
