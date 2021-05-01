@@ -88,15 +88,31 @@ proc raiseRestEncodingBytesError*(field: static string) {.
   exc.field = field
   raise exc
 
-template ac() =
-  createPath(path, [("key", "value"), ("key2", "value2")])
-
 proc newArrayNode(nodes: openarray[NimNode]): NimNode =
-  newTree(nnkBracketExpr, @nodes)
+  newTree(nnkBracket, @nodes)
+
+proc isPostMethod(node: NimNode): bool {.compileTime.} =
+  let methodName =
+    if node.kind == nnkDotExpr:
+      node.expectLen(2)
+      node[1].expectKind(nnkIdent)
+      node[1].strVal
+    elif node.kind == nnkIdent:
+      node.strVal
+    else:
+      ""
+  case methodName
+  of "MethodGet", "MethodHead", "MethodTrace", "MethodOptions", "MethodConnect":
+    false
+  of "MethodPost", "MethodPut", "MethodPatch", "MethodDelete":
+    true
+  else:
+    false
 
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   let parameters = prc.findChild(it.kind == nnkFormalParams)
   let requestPath = newIdentNode("requestPath")
+  let requestQuery = newIdentNode("requestQuery")
   var statements = newStmtList()
 
   if prc.kind notin {nnkProcDef, nnkLambda, nnkMethodDef, nnkDo}:
@@ -227,6 +243,9 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       let paramLiteral = item.literal
       let encodedName = item.ename
 
+      if not(meth.isPostMethod()):
+        error("Non-post method should not contain `body` argument", paramName)
+
       statements.add quote do:
         let `encodedName` =
           block:
@@ -234,9 +253,12 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             if res.isErr():
               raiseRestEncodingBytesError(`paramLiteral`)
             res.get()
+    else:
+      if meth.isPostMethod():
+        error("POST/PUT/PATCH/DELETE methods must have `body` argument",
+              parameters)
 
     if len(pathArguments) > 0:
-      echo repr pathArguments
       let pathLiteral = newStrLitNode(endpoint)
       let arrayItems = newArrayNode(
         pathArguments.mapIt(newPar(it.literal, it.ename))
@@ -248,6 +270,26 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       statements.add quote do:
         let `requestPath` = `pathLiteral`
 
+    if len(optionalArguments) > 0:
+      let optionLiteral = newStrLitNode("")
+      let arrayItems = newArrayNode(
+        optionalArguments.mapIt(it.ename)
+      )
+      statements.add quote do:
+        let `requestQuery` =
+          block:
+            let queryArgs = `arrayItems`
+            var res: string
+            for item in queryArgs:
+              if len(item) > 0:
+                if len(res) > 0:
+                  res.add("&")
+                res.add(item)
+            res
+    else:
+      let optionLiteral = newStrLitNode("")
+      statements.add quote do:
+        let `requestQuery` = `optionLiteral`
 
   # echo treeRepr getAst(ac())
   # echo "endpoint = ", prc.getEndpoint()
@@ -255,6 +297,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
 
   # let prcName = prc.name.getName
   echo repr statements
+  # echo treeRepr statements
   newStmtList()
 
 
@@ -286,5 +329,14 @@ macro rest*(prc: untyped): untyped =
     echo repr res
   res
 
-proc someProc(epoch: seq[byte], data: int) {.rest, endpoint: "/api/eth/{epoch}".} =
+proc someProc(epoch: seq[byte], slot: uint64, data: int) {.
+     rest, endpoint: "/api/eth/{epoch}/data/{slot}".} =
+  discard
+
+proc someProc(epoch: seq[byte], slot: uint64, data: int, body: int) {.
+     rest, meth: MethodPost, endpoint: "/api/eth/{epoch}/data/{slot}".} =
+  discard
+
+proc someProc(epoch: seq[byte], slot: uint64, data: int, body: string) {.
+     rest, meth: HttpMethod.MethodPost, endpoint: "/api/eth/{epoch}/data/{slot}".} =
   discard
