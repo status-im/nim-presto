@@ -6,9 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
-import httputils
 import std/[macros, options, uri, sequtils]
+import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
+import httputils, stew/base10
 import segpath, common, macrocommon
 export httpclient, httptable, httpcommon, options, httputils
 
@@ -26,6 +26,20 @@ type
   RestError* = object of CatchableError
   RestEncodingError* = object of RestError
     field*: cstring
+  RestDecodingError* = object of RestError
+  RestCommunicationError* = object of RestError
+    exc*: ref HttpError
+  RestResponseError* = object of RestError
+    status*: int
+    contentType*: string
+    message*: string
+
+const
+  RestContentTypeArg = "restContentType"
+  RestAcceptTypeArg = "restAcceptType"
+  RestClientArg = "restClient"
+  NotAllowedArgumentNames = [RestClientArg, RestContentTypeArg,
+                             RestAcceptTypeArg]
 
 proc new*(t: typedesc[RestClientRef],
           url: string,
@@ -51,6 +65,16 @@ proc new*(t: typedesc[RestClientRef],
       res.get()
   var res = RestClientRef(session: session, address: address)
   ok(res)
+
+proc createRequest*(client: RestClientRef, path: string, query: string,
+                    contentType: string, acceptType: string,
+                    meth: HttpMethod): HttpClientRequestRef =
+  var address = client.address
+  address.path = path
+  address.query = query
+  HttpClientRequestRef.new(client.session, address, meth,
+                           headers = [("content-type", contentType),
+                                      ("accept", acceptType)])
 
 proc getEndpointOrDefault(prc: NimNode,
                           default: string): string {.compileTime.} =
@@ -78,15 +102,54 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
 
 proc raiseRestEncodingStringError*(field: static string) {.
      noreturn, noinline.} =
-  let exc = newException(RestEncodingError, "Unable to encode object to string")
-  exc.field = field
-  raise exc
+  var msg = "Unable to encode object to string, field "
+  msg.add("[")
+  msg.add(field)
+  msg.add("]")
+  let error = newException(RestEncodingError, msg)
+  error.field = field
+  raise error
 
 proc raiseRestEncodingBytesError*(field: static string) {.
      noreturn, noinline.} =
-  let exc = newException(RestEncodingError, "Unable to encode object to bytes")
-  exc.field = field
-  raise exc
+  var msg = "Unable to encode object to bytes, field "
+  msg.add("[")
+  msg.add(field)
+  msg.add("]")
+  let error = newException(RestEncodingError, msg)
+  error.field = field
+  raise error
+
+proc raiseRestCommunicationError*(exc: ref HttpError) {.
+     noreturn, noinline.} =
+  var msg = "Communication failed while sending/receiving request"
+  msg.add(", http error [")
+  msg.add(exc.name)
+  msg.add("]")
+  let error = newException(RestCommunicationError, msg)
+  error.exc = exc
+  raise error
+
+proc raiseRestResponseError*(status: int, contentType: string,
+                             message: openarray[byte]) {.
+     noreturn, noinline.} =
+  var msg = "Unsuccessfull response received"
+  msg.add(", http code [")
+  msg.add(Base10.toString(uint64(status)))
+  msg.add("]")
+  let error = newException(RestResponseError, msg)
+  error.status = status
+  error.contentType = contentType
+  error.message = bytesToString(message)
+  raise error
+
+proc raiseRestDecodingBytesError*(message: cstring) {.noreturn, noinline.} =
+  var msg = "Unable to decode REST response"
+  msg.add(", error [")
+  msg.add(message)
+  msg.add("]")
+  let error = newException(RestDecodingError, msg)
+  raise error
 
 proc newArrayNode(nodes: openarray[NimNode]): NimNode =
   newTree(nnkBracket, @nodes)
@@ -109,19 +172,128 @@ proc isPostMethod(node: NimNode): bool {.compileTime.} =
   else:
     false
 
+proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
+                             contentIdent: NimNode,
+                             acceptIdent: NimNode,
+                             stmtList: NimNode): NimNode {.compileTime.} =
+  var procdef = copyNimTree(prc)
+  var parameters = copyNimTree(prc.findChild(it.kind == nnkFormalParams))
+  var pragmas = copyNimTree(prc.pragma())
+  let clientArg =
+    newTree(nnkIdentDefs, clientIdent, newIdentNode("RestClientRef"),
+            newEmptyNode())
+  let contentTypeArg =
+    newTree(nnkIdentDefs, contentIdent, newIdentNode("string"),
+            newStrLitNode("application/json"))
+  let acceptTypeArg =
+    newTree(nnkIdentDefs, acceptIdent, newIdentNode("string"),
+            newStrLitNode("application/json"))
+
+  let asyncPragmaArg = newIdentNode("async")
+
+  var newParams =
+    block:
+      var res: seq[NimNode]
+      for item in parameters:
+        let includeParam =
+          case item.kind
+          of nnkIdentDefs:
+            item[0].expectKind(nnkIdent)
+            case item[0].strVal().toLowerAscii()
+              of RestContentTypeArg, RestAcceptTypeArg, RestClientArg:
+                false
+              else:
+                true
+          else:
+            true
+        if includeParam:
+          res.add(item)
+
+      res[0] = newTree(nnkBracketExpr, newIdentNode("Future"), res[0])
+      res.insert(clientArg, 1)
+      res.add(contentTypeArg)
+      res.add(acceptTypeArg)
+      res
+
+  var newPragmas =
+    block:
+      var res: seq[NimNode]
+      res.add(asyncPragmaArg)
+      for item in pragmas:
+        let includePragma =
+          case item.kind
+          of nnkIdent:
+            case item.strVal().toLowerAscii()
+            of "rest", "async", "endpoint", "meth":
+              false
+            else:
+              true
+          of nnkExprColonExpr:
+            item[0].expectKind(nnkIdent)
+            case item[0].strVal().toLowerAscii()
+            of "endpoint", "meth":
+              false
+            else:
+              true
+          else:
+            true
+        if includePragma:
+           # We do not copy here, because we already copied original tree with
+           # copyNimTree().
+          res.add(item)
+      res
+
+  for index, item in procdef.pairs():
+    case item.kind
+    of nnkFormalParams:
+      procdef[index] = newTree(nnkFormalParams, newParams)
+    of nnkPragma:
+      procdef[index] = newTree(nnkPragma, newPragmas)
+    else:
+      discard
+
+  # We accept only `nnkProcDef` definitions, so we can use numeric index here
+  procdef[6] = stmtList
+
+  procdef
+
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
-  let parameters = prc.findChild(it.kind == nnkFormalParams)
-  let requestPath = newIdentNode("requestPath")
-  let requestQuery = newIdentNode("requestQuery")
+  if prc.kind notin {nnkProcDef}:
+    error("Cannot transform this node kind into an REST client procedure." &
+          " Only `proc` definition expected.")
+  let
+    parameters = prc.findChild(it.kind == nnkFormalParams)
+    requestPath = newIdentNode("requestPath")
+    requestQuery = newIdentNode("requestQuery")
+    requestIdent = newIdentNode("request")
+    responseIdent = newIdentNode("response")
+    responseCodeIdent = newIdentNode("responseCode")
+    responseContentTypeIdent = newIdentNode("responseContentType")
+    responseBytesIdent = newIdentNode("responseBytes")
+    responseResultIdent = newIdentNode("responseResult")
+    clientIdent = newIdentNode(RestClientArg)
+    contentTypeIdent = newIdentNode(RestContentTypeArg)
+    acceptTypeIdent = newIdentNode(RestAcceptTypeArg)
+
   var statements = newStmtList()
 
-  if prc.kind notin {nnkProcDef, nnkLambda, nnkMethodDef, nnkDo}:
-    error("Cannot transform this node kind into an async proc." &
-          " proc/method definition or lambda node expected.")
   block:
-    let res = prc.getAsyncPragma()
-    if not(isNil(res)):
-      error("REST procedure should not have {.async.} pragma", res)
+    let ares = prc.getAsyncPragma()
+    if not(isNil(ares)):
+      error("REST procedure should not have {.async.} pragma", ares)
+
+  block:
+    let bres = prc.findChild(it.kind == nnkStmtList)
+    if not(isNil(bres)):
+      error("REST procedure should not have body code", prc)
+
+  let returnType =
+    block:
+      parameters.expectMinLen(1)
+      if parameters[0].kind == nnkEmpty:
+        error("REST procedure should not have empty return value", parameters)
+      copyNimNode(parameters[0])
+
   let endpoint =
     block:
       let res = prc.getEndpointOrDefault("")
@@ -129,10 +301,13 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
         error("REST procedure should have non-empty {.endpoint.} pragma",
               prc.pragma())
       res
+
   let meth = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
                                                ident("MethodGet")))
   let spath = SegmentedPath.init(HttpMethod.MethodGet, endpoint, nil)
   var patterns = spath.getPatterns()
+
+  let isPostMethod = meth.isPostMethod()
 
   let (bodyArgument, optionalArguments, pathArguments) =
     block:
@@ -140,6 +315,9 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       var optionalRes: seq[tuple[name, ntype, ename, literal: NimNode]]
       var pathRes: seq[tuple[name, ntype, ename, literal: NimNode]]
       for paramName, paramType in parameters.paramsIter():
+        if $paramName in NotAllowedArgumentNames:
+          error("Argument name is reserved name, please choose another one",
+                paramName)
         let literal = newStrLitNode($paramName)
         let index = patterns.find($paramName)
         if index >= 0:
@@ -238,83 +416,161 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             sres.add(encodeUrl(res.get(), true))
             sres
 
-    if bodyArgument.isSome():
-      let paramName = item.name
-      let paramLiteral = item.literal
-      let encodedName = item.ename
+  if bodyArgument.isSome():
+    let bodyItem = bodyArgument.get()
+    let paramName = bodyItem.name
+    let paramLiteral = bodyItem.literal
+    let encodedName = bodyItem.ename
 
-      if not(meth.isPostMethod()):
-        error("Non-post method should not contain `body` argument", paramName)
+    if not(isPostMethod):
+      error("Non-post method should not contain `body` argument", paramName)
 
-      statements.add quote do:
-        let `encodedName` =
-          block:
-            let res = encodeBytes(`paramName`, contentType)
-            if res.isErr():
-              raiseRestEncodingBytesError(`paramLiteral`)
-            res.get()
-    else:
-      if meth.isPostMethod():
-        error("POST/PUT/PATCH/DELETE methods must have `body` argument",
-              parameters)
-
-    if len(pathArguments) > 0:
-      let pathLiteral = newStrLitNode(endpoint)
-      let arrayItems = newArrayNode(
-        pathArguments.mapIt(newPar(it.literal, it.ename))
-      )
-      statements.add quote do:
-        let `requestPath` = createPath(`pathLiteral`, `arrayItems`)
-    else:
-      let pathLiteral = newStrLitNode(endpoint)
-      statements.add quote do:
-        let `requestPath` = `pathLiteral`
-
-    if len(optionalArguments) > 0:
-      let optionLiteral = newStrLitNode("")
-      let arrayItems = newArrayNode(
-        optionalArguments.mapIt(it.ename)
-      )
-      statements.add quote do:
-        let `requestQuery` =
-          block:
-            let queryArgs = `arrayItems`
-            var res: string
-            for item in queryArgs:
-              if len(item) > 0:
-                if len(res) > 0:
-                  res.add("&")
-                res.add(item)
-            res
-    else:
-      let optionLiteral = newStrLitNode("")
-      statements.add quote do:
-        let `requestQuery` = `optionLiteral`
-
-  # echo treeRepr getAst(ac())
-  # echo "endpoint = ", prc.getEndpoint()
-  # echo treeRepr prc.getMethod()
-
-  # let prcName = prc.name.getName
-  echo repr statements
-  # echo treeRepr statements
-  newStmtList()
-
-
-template aa(f, v) =
-  let res = encodeString(v)
-  if res.isErr():
-    raiseRestEncodingError(f, "Unable to stringify object")
-  encodeUrl(res.get(), true)
-
-template ab(f, v) =
-  if v.isSome():
-    let res = encodeString(v.get())
-    if res.isErr():
-      raiseRestEncodingError(f, "Unable to stringify object")
-    f & "=" & encodeUrl(res.get(), true)
+    statements.add quote do:
+      let `encodedName` =
+        block:
+          let res = encodeBytes(`paramName`, `contentTypeIdent`)
+          if res.isErr():
+            raiseRestEncodingBytesError(`paramLiteral`)
+          res.get()
   else:
-    ""
+    if isPostMethod:
+      error("POST/PUT/PATCH/DELETE requests must have `body` argument",
+            parameters)
+
+  if len(pathArguments) > 0:
+    let pathLiteral = newStrLitNode(endpoint)
+    let arrayItems = newArrayNode(
+      pathArguments.mapIt(newPar(it.literal, it.ename))
+    )
+    statements.add quote do:
+      let `requestPath` = createPath(`pathLiteral`, `arrayItems`)
+  else:
+    let pathLiteral = newStrLitNode(endpoint)
+    statements.add quote do:
+      let `requestPath` = `pathLiteral`
+
+  if len(optionalArguments) > 0:
+    let arrayItems = newArrayNode(optionalArguments.mapIt(it.ename))
+    statements.add quote do:
+      let `requestQuery` =
+        block:
+          let queryArgs = `arrayItems`
+          var res: string
+          for item in queryArgs:
+            if len(item) > 0:
+              if len(res) > 0:
+                res.add("&")
+              res.add(item)
+          res
+  else:
+    let optionLiteral = newStrLitNode("")
+    statements.add quote do:
+      let `requestQuery` = `optionLiteral`
+
+  statements.add quote do:
+    var `requestIdent` = createRequest(`clientIdent`, `requestPath`,
+                                       `requestQuery`, `contentTypeIdent`,
+                                       `acceptTypeIdent`, `meth`)
+    var `responseIdent`: HttpClientResponseRef = nil
+
+  if isPostMethod:
+    let bodyIdent = bodyArgument.get().ename
+    statements.add quote do:
+      let (`responseCodeIdent`, `responseContentTypeIdent`,
+           `responseBytesIdent`) =
+        try:
+          let chunkSize = `clientIdent`.session.connectionBufferSize
+          # Sending request headers
+          let writer = await `requestIdent`.open()
+          # Writing request body
+          var offset = 0
+          while offset < len(`bodyIdent`):
+            let toWrite = min(len(`bodyIdent`) - offset, chunkSize)
+            await writer.write(unsafeAddr `bodyIdent`[offset], toWrite)
+            offset = offset + toWrite
+          # Receiving response
+          `responseIdent` = await writer.finish()
+          # Closing request object
+          await `requestIdent`.closeWait()
+          `requestIdent` = nil
+          # Receiving response body
+          let data = await `responseIdent`.getBodyBytes()
+          let res = (
+            `responseIdent`.status,
+            `responseIdent`.headers.getString("content-type"),
+            data
+          )
+          # Closing response object
+          await `responseIdent`.closeWait()
+          `responseIdent` = nil
+          # Returning value
+          res
+        except CancelledError as exc:
+          # Closing request and/or response objects to avoid connection leaks.
+          if not(isNil(`requestIdent`)):
+            await `requestIdent`.closeWait()
+          if not(isNil(`responseIdent`)):
+            await `responseIdent`.closeWait()
+          raise exc
+        except HttpError as exc:
+          # Closing request and/or response objects to avoid connection leaks.
+          if not(isNil(`requestIdent`)):
+            await `requestIdent`.closeWait()
+          if not(isNil(`responseIdent`)):
+            await `responseIdent`.closeWait()
+          raiseRestCommunicationError(exc)
+  else:
+    statements.add quote do:
+      let (`responseCodeIdent`, `responseContentTypeIdent`,
+           `responseBytesIdent`) =
+        try:
+          # Sending request headers and receiving response headers
+          `responseIdent` = await `requestIdent`.send()
+          # Closing request object
+          await `requestIdent`.closeWait()
+          `requestIdent` = nil
+          # Receiving response body
+          let data = await `responseIdent`.getBodyBytes()
+          let res = (`responseIdent`.status,
+                     `responseIdent`.headers.getString("content-type"),
+                     data)
+          # Closing response object
+          await `responseIdent`.closeWait()
+          `responseIdent` = nil
+          # Returning value
+          res
+        except CancelledError as exc:
+          # Closing request and/or response objects to avoid connection leaks.
+          if not(isNil(`requestIdent`)):
+            await `requestIdent`.closeWait()
+          if not(isNil(`responseIdent`)):
+            await `responseIdent`.closeWait()
+          raise exc
+        except HttpError as exc:
+          # Closing request and/or response objects to avoid connection leaks.
+          if not(isNil(`requestIdent`)):
+            await `requestIdent`.closeWait()
+          if not(isNil(`responseIdent`)):
+            await `responseIdent`.closeWait()
+          raiseRestCommunicationError(exc)
+
+  statements.add quote do:
+    if `responseCodeIdent` >= 200 and `responseCodeIdent` < 300:
+      let `responseResultIdent` =
+        block:
+          let res = decodeBytes(`returnType`, `responseBytesIdent`,
+                                `responseContentTypeIdent`)
+          if res.isErr():
+            raiseRestDecodingBytesError(res.error())
+          res.get()
+      return `responseResultIdent`
+    else:
+      raiseRestResponseError(`responseCodeIdent`, `responseContentTypeIdent`,
+                             `responseBytesIdent`)
+
+  let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
+                                    acceptTypeIdent, statements)
+  res
 
 macro rest*(prc: untyped): untyped =
   let res =
@@ -328,15 +584,3 @@ macro rest*(prc: untyped): untyped =
   when defined(nimDumpRest):
     echo repr res
   res
-
-proc someProc(epoch: seq[byte], slot: uint64, data: int) {.
-     rest, endpoint: "/api/eth/{epoch}/data/{slot}".} =
-  discard
-
-proc someProc(epoch: seq[byte], slot: uint64, data: int, body: int) {.
-     rest, meth: MethodPost, endpoint: "/api/eth/{epoch}/data/{slot}".} =
-  discard
-
-proc someProc(epoch: seq[byte], slot: uint64, data: int, body: string) {.
-     rest, meth: HttpMethod.MethodPost, endpoint: "/api/eth/{epoch}/data/{slot}".} =
-  discard
