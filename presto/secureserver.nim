@@ -10,8 +10,8 @@ import std/[options, strutils]
 import chronos, chronos/apps/http/shttpserver
 import chronicles
 import stew/results
-import route, common, segpath, servercommon, serverprivate
-export options, chronos, shttpserver, servercommon, chronicles
+import route, common, segpath, servercommon, serverprivate, agent
+export options, chronos, shttpserver, servercommon, chronicles, agent
 
 type
   SecureRestServer* = object of RootObj
@@ -25,7 +25,7 @@ proc new*(t: typedesc[SecureRestServerRef],
           address: TransportAddress,
           tlsPrivateKey: TLSPrivateKey,
           tlsCertificate: TLSCertificate,
-          serverIdent: string = "",
+          serverIdent: string = PrestoIdent,
           secureFlags: set[TLSFlags] = {},
           serverFlags = {HttpServerFlags.NotifyDisconnect},
           socketFlags: set[ServerFlags] = {ReuseAddr},

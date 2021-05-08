@@ -10,8 +10,8 @@ import std/[options, json, strutils]
 import chronos, chronos/apps/http/httpserver
 import chronicles
 import stew/results
-import route, common, segpath, servercommon, serverprivate
-export options, chronos, httpserver, servercommon, chronicles
+import route, common, segpath, servercommon, serverprivate, agent
+export options, chronos, httpserver, servercommon, chronicles, agent
 
 type
   RestServer* = object of RootObj
@@ -23,7 +23,7 @@ type
 proc new*(t: typedesc[RestServerRef],
           router: RestRouter,
           address: TransportAddress,
-          serverIdent: string = "",
+          serverIdent: string = PrestoIdent,
           serverFlags = {HttpServerFlags.NotifyDisconnect},
           socketFlags: set[ServerFlags] = {ReuseAddr},
           serverUri = Uri(),

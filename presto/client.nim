@@ -9,8 +9,8 @@
 import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import httputils, stew/base10
-import segpath, common, macrocommon
-export httpclient, httptable, httpcommon, options, httputils
+import segpath, common, macrocommon, agent
+export httpclient, httptable, httpcommon, options, agent, httputils
 
 template endpoint*(v: string) {.pragma.}
 template meth*(v: HttpMethod) {.pragma.}
@@ -19,6 +19,12 @@ type
   RestClient* = object of RootObj
     session: HttpSessionRef
     address: HttpAddress
+    agent: string
+
+  RestResponse* = object
+    status: int
+    contentType: string
+    data: seq[byte]
 
   RestClientRef* = ref RestClient
 
@@ -29,6 +35,7 @@ type
   RestDecodingError* = object of RestError
   RestCommunicationError* = object of RestError
     exc*: ref HttpError
+  RestRedirectionError* = object of RestError
   RestResponseError* = object of RestError
     status*: int
     contentType*: string
@@ -48,7 +55,8 @@ proc new*(t: typedesc[RestClientRef],
           maxRedirections: int = HttpMaxRedirections,
           connectTimeout = HttpConnectTimeout,
           headersTimeout = HttpHeadersTimeout,
-          bufferSize: int = 4096
+          bufferSize: int = 4096,
+          userAgent = PrestoIdent
          ): RestResult[RestClientRef] =
   let session = HttpSessionRef.new(flags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections)
@@ -63,18 +71,54 @@ proc new*(t: typedesc[RestClientRef],
       if res.isErr():
         return err("Unable to resolve remote hostname")
       res.get()
-  var res = RestClientRef(session: session, address: address)
-  ok(res)
+  ok(RestClientRef(session: session, address: address, agent: userAgent))
 
-proc createRequest*(client: RestClientRef, path: string, query: string,
-                    contentType: string, acceptType: string,
-                    meth: HttpMethod): HttpClientRequestRef =
+proc new*(t: typedesc[RestClientRef],
+          ta: TransportAddress,
+          scheme: HttpClientScheme = HttpClientScheme.NonSecure,
+          flags: HttpClientFlags = {},
+          maxConnections: int = -1,
+          maxRedirections: int = HttpMaxRedirections,
+          connectTimeout = HttpConnectTimeout,
+          headersTimeout = HttpHeadersTimeout,
+          bufferSize: int = 4096,
+          userAgent = PrestoIdent
+         ): RestClientRef =
+  let session = HttpSessionRef.new(flags, maxRedirections, connectTimeout,
+                                   headersTimeout, bufferSize, maxConnections)
+  let address = ta.getAddress(scheme, "")
+  RestClientRef(session: session, address: address, agent: userAgent)
+
+proc closeWait*(client: RestClientRef) {.async.} =
+  await client.session.closeWait()
+
+proc createPostRequest*(client: RestClientRef, path: string, query: string,
+                        contentType: string, acceptType: string,
+                        meth: HttpMethod,
+                        contentLength: uint64): HttpClientRequestRef =
   var address = client.address
   address.path = path
   address.query = query
-  HttpClientRequestRef.new(client.session, address, meth,
-                           headers = [("content-type", contentType),
-                                      ("accept", acceptType)])
+  let headers =
+    [
+      ("content-type", contentType),
+      ("content-length", Base10.toString(contentLength)),
+      ("accept", acceptType),
+      ("user-agent", client.agent)
+    ]
+  HttpClientRequestRef.new(client.session, address, meth, headers = headers)
+
+proc createGetRequest*(client: RestClientRef, path: string, query: string,
+                       contentType: string, acceptType: string,
+                       meth: HttpMethod): HttpClientRequestRef =
+  var address = client.address
+  address.path = path
+  address.query = query
+  let headers = [
+    ("accept", acceptType),
+    ("user-agent", client.agent)
+  ]
+  HttpClientRequestRef.new(client.session, address, meth, headers = headers)
 
 proc getEndpointOrDefault(prc: NimNode,
                           default: string): string {.compileTime.} =
@@ -106,7 +150,7 @@ proc raiseRestEncodingStringError*(field: static string) {.
   msg.add("[")
   msg.add(field)
   msg.add("]")
-  let error = newException(RestEncodingError, msg)
+  var error = newException(RestEncodingError, msg)
   error.field = field
   raise error
 
@@ -116,7 +160,7 @@ proc raiseRestEncodingBytesError*(field: static string) {.
   msg.add("[")
   msg.add(field)
   msg.add("]")
-  let error = newException(RestEncodingError, msg)
+  var error = newException(RestEncodingError, msg)
   error.field = field
   raise error
 
@@ -125,31 +169,36 @@ proc raiseRestCommunicationError*(exc: ref HttpError) {.
   var msg = "Communication failed while sending/receiving request"
   msg.add(", http error [")
   msg.add(exc.name)
-  msg.add("]")
-  let error = newException(RestCommunicationError, msg)
+  msg.add("]: ")
+  msg.add(exc.msg)
+  var error = newException(RestCommunicationError, msg)
   error.exc = exc
   raise error
 
-proc raiseRestResponseError*(status: int, contentType: string,
-                             message: openarray[byte]) {.
+proc raiseRestResponseError*(resp: RestResponse) {.
      noreturn, noinline.} =
   var msg = "Unsuccessfull response received"
   msg.add(", http code [")
-  msg.add(Base10.toString(uint64(status)))
+  msg.add(Base10.toString(uint64(resp.status)))
   msg.add("]")
-  let error = newException(RestResponseError, msg)
-  error.status = status
-  error.contentType = contentType
-  error.message = bytesToString(message)
+  var error = newException(RestResponseError, msg)
+  error.status = resp.status
+  error.contentType = resp.contentType
+  error.message = bytesToString(resp.data)
   raise error
+
+proc raiseRestRedirectionError*(msg: string) {.
+     noreturn, noinline.} =
+  var msg = "Unable to follow redirect location, "
+  msg.add(msg)
+  raise (ref RestRedirectionError)(msg: msg)
 
 proc raiseRestDecodingBytesError*(message: cstring) {.noreturn, noinline.} =
   var msg = "Unable to decode REST response"
   msg.add(", error [")
   msg.add(message)
   msg.add("]")
-  let error = newException(RestDecodingError, msg)
-  raise error
+  raise (ref RestDecodingError)(msg: msg)
 
 proc newArrayNode(nodes: openarray[NimNode]): NimNode =
   newTree(nnkBracket, @nodes)
@@ -257,6 +306,171 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
 
   procdef
 
+proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
+     async.} =
+  var
+    request = req
+    redirect: HttpClientRequestRef = nil
+    response: HttpClientResponseRef = nil
+  while true:
+    try:
+      response = await req.send()
+      if response.status >= 300 and response.status < 400:
+        redirect =
+          block:
+            if "location" in response.headers:
+              let location = response.headers.getString("location")
+              if len(location) > 0:
+                let res = request.redirect(parseUri(location))
+                if res.isErr():
+                  raiseRestRedirectionError(res.error())
+                res.get()
+              else:
+                raiseRestRedirectionError("Location header with an empty value")
+            else:
+              raiseRestRedirectionError("Location header missing")
+        await request.closeWait()
+        request = nil
+        discard await response.consumeBody()
+        await response.closeWait()
+        response = nil
+        request = redirect
+        redirect = nil
+      else:
+        await request.closeWait()
+        request = nil
+        let res =
+          block:
+            let status = response.status
+            let contentType = response.headers.getString("content-type")
+            let data = await response.getBodyBytes()
+            await response.closeWait()
+            response = nil
+            RestResponse(status: status, contentType: contentType, data: data)
+        return res
+    except CancelledError as exc:
+      # TODO: when `finally` proved to work inside loops, move closeWait() logic
+      # to `finally` handler.
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raise exc
+    except RestError as exc:
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raise exc
+    except HttpError as exc:
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raiseRestCommunicationError(exc)
+
+proc requestWithBody*(req: HttpClientRequestRef,
+                      pbytes: pointer,
+                      nbytes: uint64,
+                      chunkSize: int): Future[RestResponse] {.async.} =
+  doAssert(chunkSize > 0 and chunkSize <= high(int))
+  var
+    request = req
+    redirect: HttpClientRequestRef = nil
+    response: HttpClientResponseRef = nil
+    writer: HttpBodyWriter = nil
+    pbuffer = cast[ptr UncheckedArray[byte]](pbytes)
+
+  while true:
+    try:
+      # Sending HTTP request headers and obtain HTTP request body writer
+      writer = await request.open()
+      # Sending HTTP request body
+      var offset = 0'u64
+      while offset < nbytes:
+        let toWrite = int(min(nbytes - offset, uint64(chunkSize)))
+        await writer.write(unsafeAddr pbuffer[offset], toWrite)
+        offset = offset + uint64(toWrite)
+      # Finishing HTTP request body
+      await writer.finish()
+      await writer.closeWait()
+      writer = nil
+      # Waiting for response headers
+      response = await request.finish()
+      if response.status >= 300 and response.status < 400:
+        # Handling redirection
+        redirect =
+          block:
+            if "location" in response.headers:
+              let location = response.headers.getString("location")
+              if len(location) > 0:
+                let res = request.redirect(parseUri(location))
+                if res.isErr():
+                  raiseRestRedirectionError(res.error())
+                res.get()
+              else:
+                raiseRestRedirectionError("Location header with an empty value")
+            else:
+              raiseRestRedirectionError("Location header missing")
+        await request.closeWait()
+        request = nil
+        # We do not care about response body in redirection.
+        discard await response.consumeBody()
+        await response.closeWait()
+        response = nil
+        request = redirect
+        redirect = nil
+      else:
+        await request.closeWait()
+        request = nil
+        let res =
+          block:
+            let status = response.status
+            let contentType = response.headers.getString("content-type")
+            let data = await response.getBodyBytes()
+            await response.closeWait()
+            response = nil
+            RestResponse(status: status, contentType: contentType, data: data)
+        return res
+    except CancelledError as exc:
+      # TODO: when `finally` proved to work inside loops, move closeWait() logic
+      # to `finally` handler.
+      if not(isNil(writer)):
+        await writer.closeWait()
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raise exc
+    except RestError as exc:
+      if not(isNil(writer)):
+        await writer.closeWait()
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raise exc
+    except HttpError as exc:
+      if not(isNil(writer)):
+        await writer.closeWait()
+      if not(isNil(request)):
+        await request.closeWait()
+      if not(isNil(redirect)):
+        await redirect.closeWait()
+      if not(isNil(response)):
+        await response.closeWait()
+      raiseRestCommunicationError(exc)
+
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   if prc.kind notin {nnkProcDef}:
     error("Cannot transform this node kind into an REST client procedure." &
@@ -266,11 +480,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
     requestPath = newIdentNode("requestPath")
     requestQuery = newIdentNode("requestQuery")
     requestIdent = newIdentNode("request")
-    responseIdent = newIdentNode("response")
-    responseCodeIdent = newIdentNode("responseCode")
-    responseContentTypeIdent = newIdentNode("responseContentType")
-    responseBytesIdent = newIdentNode("responseBytes")
     responseResultIdent = newIdentNode("responseResult")
+    responseObjectIdent = newIdentNode("responseObject")
     clientIdent = newIdentNode(RestClientArg)
     contentTypeIdent = newIdentNode(RestContentTypeArg)
     acceptTypeIdent = newIdentNode(RestAcceptTypeArg)
@@ -467,106 +678,43 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
     statements.add quote do:
       let `requestQuery` = `optionLiteral`
 
-  statements.add quote do:
-    var `requestIdent` = createRequest(`clientIdent`, `requestPath`,
-                                       `requestQuery`, `contentTypeIdent`,
-                                       `acceptTypeIdent`, `meth`)
-    var `responseIdent`: HttpClientResponseRef = nil
-
   if isPostMethod:
     let bodyIdent = bodyArgument.get().ename
     statements.add quote do:
-      let (`responseCodeIdent`, `responseContentTypeIdent`,
-           `responseBytesIdent`) =
-        try:
+      let `responseObjectIdent` =
+        block:
           let chunkSize = `clientIdent`.session.connectionBufferSize
-          # Sending request headers
-          let writer = await `requestIdent`.open()
-          # Writing request body
-          var offset = 0
-          while offset < len(`bodyIdent`):
-            let toWrite = min(len(`bodyIdent`) - offset, chunkSize)
-            await writer.write(unsafeAddr `bodyIdent`[offset], toWrite)
-            offset = offset + toWrite
-          # Receiving response
-          `responseIdent` = await writer.finish()
-          # Closing request object
-          await `requestIdent`.closeWait()
-          `requestIdent` = nil
-          # Receiving response body
-          let data = await `responseIdent`.getBodyBytes()
-          let res = (
-            `responseIdent`.status,
-            `responseIdent`.headers.getString("content-type"),
-            data
-          )
-          # Closing response object
-          await `responseIdent`.closeWait()
-          `responseIdent` = nil
-          # Returning value
-          res
-        except CancelledError as exc:
-          # Closing request and/or response objects to avoid connection leaks.
-          if not(isNil(`requestIdent`)):
-            await `requestIdent`.closeWait()
-          if not(isNil(`responseIdent`)):
-            await `responseIdent`.closeWait()
-          raise exc
-        except HttpError as exc:
-          # Closing request and/or response objects to avoid connection leaks.
-          if not(isNil(`requestIdent`)):
-            await `requestIdent`.closeWait()
-          if not(isNil(`responseIdent`)):
-            await `responseIdent`.closeWait()
-          raiseRestCommunicationError(exc)
+          let `requestIdent` = createPostRequest(`clientIdent`, `requestPath`,
+                                                 `requestQuery`,
+                                                 `contentTypeIdent`,
+                                                 `acceptTypeIdent`, `meth`,
+                                                 uint64(len(`bodyIdent`)))
+          await requestWithBody(`requestIdent`,
+                                cast[pointer](unsafeAddr `bodyIdent`[0]),
+                                uint64(len(`bodyIdent`)), chunkSize)
   else:
     statements.add quote do:
-      let (`responseCodeIdent`, `responseContentTypeIdent`,
-           `responseBytesIdent`) =
-        try:
-          # Sending request headers and receiving response headers
-          `responseIdent` = await `requestIdent`.send()
-          # Closing request object
-          await `requestIdent`.closeWait()
-          `requestIdent` = nil
-          # Receiving response body
-          let data = await `responseIdent`.getBodyBytes()
-          let res = (`responseIdent`.status,
-                     `responseIdent`.headers.getString("content-type"),
-                     data)
-          # Closing response object
-          await `responseIdent`.closeWait()
-          `responseIdent` = nil
-          # Returning value
-          res
-        except CancelledError as exc:
-          # Closing request and/or response objects to avoid connection leaks.
-          if not(isNil(`requestIdent`)):
-            await `requestIdent`.closeWait()
-          if not(isNil(`responseIdent`)):
-            await `responseIdent`.closeWait()
-          raise exc
-        except HttpError as exc:
-          # Closing request and/or response objects to avoid connection leaks.
-          if not(isNil(`requestIdent`)):
-            await `requestIdent`.closeWait()
-          if not(isNil(`responseIdent`)):
-            await `responseIdent`.closeWait()
-          raiseRestCommunicationError(exc)
+      let `responseObjectIdent` =
+        block:
+          let `requestIdent` = createGetRequest(`clientIdent`, `requestPath`,
+                                                `requestQuery`,
+                                                `contentTypeIdent`,
+                                                `acceptTypeIdent`, `meth`)
+          await requestWithoutBody(`requestIdent`)
 
   statements.add quote do:
-    if `responseCodeIdent` >= 200 and `responseCodeIdent` < 300:
+    if `responseObjectIdent`.status >= 200 and
+       `responseObjectIdent`.status < 300:
       let `responseResultIdent` =
         block:
-          let res = decodeBytes(`returnType`, `responseBytesIdent`,
-                                `responseContentTypeIdent`)
+          let res = decodeBytes(`returnType`, `responseObjectIdent`.data,
+                                `responseObjectIdent`.contentType)
           if res.isErr():
             raiseRestDecodingBytesError(res.error())
           res.get()
       return `responseResultIdent`
     else:
-      raiseRestResponseError(`responseCodeIdent`, `responseContentTypeIdent`,
-                             `responseBytesIdent`)
+      raiseRestResponseError(`responseObjectIdent`)
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
                                     acceptTypeIdent, statements)
