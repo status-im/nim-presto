@@ -175,10 +175,11 @@ proc `<`*(s1, s2: SegmentedPath): bool =
 
 proc init*(st: typedesc[SegmentedPath],
            upath: string): RestResult[SegmentedPath] =
-  let res = SegmentedPath(patternCb: nil, patterns: 0'u64,
-                          data: upath.split("/"))
-  if len(res.data) <= 64:
-    ok(res)
+  var data = upath.split("/")
+  if len(data) <= 64:
+    for i in 0 ..< len(data):
+      data[i] = decodeUrl(data[i], true)
+    ok(SegmentedPath(patternCb: nil, patterns: 0'u64, data: data))
   else:
     err("Path has too many segments (more then 64)")
 
