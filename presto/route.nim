@@ -145,8 +145,8 @@ macro redirect*(router: RestRouter, meth: static[HttpMethod],
   res.add quote do:
     `router`.addRedirect(`methIdent`, `fromPath`, `toPath`)
 
-  when defined(nimDumpRestAPI):
-    echo "\n", path, ": ", repr(res)
+  when defined(nimDumpRest):
+    echo "\n", fromPath, ": ", repr(res)
   return res
 
 macro api*(router: RestRouter, meth: static[HttpMethod],
@@ -336,6 +336,6 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
 
     `router`.addRoute(`methIdent`, `path`, `doMain`)
 
-  when defined(nimDumpRestAPI):
+  when defined(nimDumpRest):
     echo "\n", path, ": ", repr(res)
   return res

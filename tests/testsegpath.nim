@@ -1,4 +1,4 @@
-import std/[unittest, strutils]
+import std/[unittest, strutils, uri]
 import ../presto/segpath
 
 when defined(nimHasUsed): {.used.}
@@ -64,6 +64,12 @@ suite "SegmentedPath test suite":
       expect AssertionError:
         let path {.used.} = SegmentedPath.init(HttpMethod.MethodGet, item,
                                                validate)
+  test "Url-encoded path test":
+    let path = encodeUrl("запрос1") & "/" & encodeUrl("запрос2") & "/" &
+               encodeUrl("запрос3")
+    let sres = SegmentedPath.init(path)
+    check $sres.get() == "запрос1/запрос2/запрос3"
+
   test "createPath() test":
     const GoodVectors = [
       (

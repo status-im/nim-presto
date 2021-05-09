@@ -314,7 +314,7 @@ proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
     response: HttpClientResponseRef = nil
   while true:
     try:
-      response = await req.send()
+      response = await request.send()
       if response.status >= 300 and response.status < 400:
         redirect =
           block:
@@ -568,7 +568,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           let res = encodeString(`paramName`)
           if res.isErr():
             raiseRestEncodingStringError(`paramLiteral`)
-          encodeUrl(res.get(), true)
+          res.get()
 
   for item in optionalArguments:
     let paramName = item.name
@@ -607,12 +607,12 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             block:
               var res: seq[string]
               for item in `paramName`.items():
-                let res = encodeString(item)
-                if res.isErr():
+                let eres = encodeString(item)
+                if eres.isErr():
                   raiseRestEncodingStringError(`paramLiteral`)
                 var sres = `paramLiteral`
                 sres.add('=')
-                sres.add(encodeUrl(res.get(), true))
+                sres.add(encodeUrl(eres.get(), true))
                 res.add(sres)
               res.join("&")
     else:

@@ -88,30 +88,49 @@ proc processRestRequest*[T](server: T,
 
         try:
           if not(request.responded()):
-            if restRes.isOk():
-              let restResponse = restRes.get()
-              let headers = HttpTable.init([("Content-Type",
-                                            restResponse.contentType)])
-              debug "Received response from handler",
-                    meth = $request.meth, peer = $request.remoteAddress(),
-                    uri = $request.uri, content_type = restResponse.contentType,
-                    content_size = len(restResponse.data)
-              return await request.respond(Http200, restResponse.data, headers)
-            else:
-              let error = restRes.error()
-              if isEmpty(error):
-                debug "Received empty response from handler",
+            case restRes.kind
+            of RestApiResponseKind.Empty:
+              debug "Received empty response from handler",
                       meth = $request.meth, peer = $request.remoteAddress(),
                       uri = $request.uri
-                return await request.respond(Http410)
-              else:
-                debug "Received error response from handler",
-                      meth = $request.meth, peer = $request.remoteAddress(),
-                      uri = $request.uri, error
-                let headers = HttpTable.init([("Content-Type",
-                                               error.contentType)])
-                return await request.respond(error.status, error.message,
-                                             headers)
+              return await request.respond(Http410)
+            of RestApiResponseKind.Content:
+              let headers = HttpTable.init([("Content-Type",
+                                            restRes.content.contentType)])
+              debug "Received response from handler",
+                    status = restRes.status,
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri,
+                    content_type = restRes.content.contentType,
+                    content_size = len(restRes.content.data)
+              return await request.respond(restRes.status,
+                                           restRes.content.data, headers)
+            of RestApiResponseKind.Error:
+              let error = restRes.errobj
+              debug "Received error response from handler",
+                    status = restRes.status,
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri, error
+              let headers = HttpTable.init([("Content-Type",
+                                            error.contentType)])
+              return await request.respond(error.status, error.message,
+                                           headers)
+            of RestApiResponseKind.Redirect:
+              debug "Received redirection from handler",
+                    status = restRes.status,
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri, location = restRes.location
+              var uri = request.uri
+              let location =
+                block:
+                  var uri = parseUri(restRes.location)
+                  if restRes.preserveQuery:
+                    if len(uri.query) == 0:
+                      uri.query = request.uri.query
+                    else:
+                      uri.query = uri.query & "&" & request.uri.query
+                  $uri
+              return await request.redirect(restRes.status, location)
           else:
             debug "Response was sent in request handler", meth = $request.meth,
                   peer = $request.remoteAddress(), uri = $request.uri,

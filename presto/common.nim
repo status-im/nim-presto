@@ -24,25 +24,48 @@ type
     message*: string
     contentType*: string
 
-  RestApiResponse* = Result[ContentBody, RestApiError]
+  RestApiResponseKind* {.pure.} = enum
+    Empty, Error, Redirect, Content
+
+  RestApiResponse* = object
+    status*: HttpCode
+    case kind*: RestApiResponseKind
+    of RestApiResponseKind.Empty:
+      discard
+    of RestApiResponseKind.Content:
+      content*: ContentBody
+    of RestApiResponseKind.Error:
+      errobj*: RestApiError
+    of RestApiResponseKind.Redirect:
+      location*: string
+      preserveQuery*: bool
 
   ByteChar* = string | seq[byte]
 
-proc error*(t: typedesc[RestApiResponse], status: HttpCode = Http200,
-            msg: string = "",
+proc error*(t: typedesc[RestApiResponse],
+            status: HttpCode = Http200, msg: string = "",
             contentType: string = "text/html"): RestApiResponse =
-  err(RestApiError(status: status, message: msg, contentType: contentType))
+  RestApiResponse(kind: RestApiResponseKind.Error, status: status,
+                  errobj: RestApiError(status: status, message: msg,
+                                       contentType: contentType))
 
 proc response*(t: typedesc[RestApiResponse], data: ByteChar,
+               status: HttpCode = Http200,
                contentType = "text/text"): RestApiResponse =
-  when data is seq[byte]:
-    ok(ContentBody(contentType: contentType, data: data))
-  else:
-    var default: seq[byte]
-    if len(data) > 0:
-      ok(ContentBody(contentType: contentType, data: toBytes(data)))
+  let content =
+    when data is seq[byte]:
+      ContentBody(contentType: contentType, data: data)
     else:
-      ok(ContentBody(contentType: contentType, data: default))
+      block:
+        var default: seq[byte]
+        if len(data) > 0:
+          ContentBody(contentType: contentType, data: toBytes(data))
+        else:
+          ContentBody(contentType: contentType, data: default)
+  RestApiResponse(kind: RestApiResponseKind.Content, status: status,
+                  content: content)
 
-proc isEmpty*(error: RestApiError): bool =
-  error == RestApiError()
+proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
+               location: string, preserveQuery = false): RestApiResponse =
+  RestApiResponse(kind: RestApiResponseKind.Redirect, status: status,
+                  location: location, preserveQuery: preserveQuery)
