@@ -8,6 +8,7 @@
 #              MIT license (LICENSE-MIT)
 import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
+import chronicles
 import httputils, stew/base10
 import segpath, common, macrocommon, agent
 export httpclient, httptable, httpcommon, options, agent, httputils
@@ -47,6 +48,10 @@ const
   RestClientArg = "restClient"
   NotAllowedArgumentNames = [RestClientArg, RestContentTypeArg,
                              RestAcceptTypeArg]
+
+chronicles.expandIt(HttpAddress):
+  remote = it.hostname & ":" & Base10.toString(it.port)
+  request = it.path & "?" & it.query
 
 proc new*(t: typedesc[RestClientRef],
           url: string,
@@ -312,9 +317,14 @@ proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
     request = req
     redirect: HttpClientRequestRef = nil
     response: HttpClientResponseRef = nil
+    address = request.address
   while true:
     try:
+      debug "Sending REST request to remote server", address,
+            http_method = $request.meth
       response = await request.send()
+      debug "Got REST response headers from remote server",
+            status = response.status, http_method = $request.meth, address
       if response.status >= 300 and response.status < 400:
         redirect =
           block:
@@ -346,11 +356,14 @@ proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
             let data = await response.getBodyBytes()
             await response.closeWait()
             response = nil
+            debug "Received REST response body from remote server",
+                  contentType = contentType, size = len(data), address
             RestResponse(status: status, contentType: contentType, data: data)
         return res
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
+      debug "REST client request was interrupted", address
       if not(isNil(request)):
         await request.closeWait()
       if not(isNil(redirect)):
@@ -359,6 +372,8 @@ proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
         await response.closeWait()
       raise exc
     except RestError as exc:
+      debug "REST client redirection error", address,
+            errorName = exc.name, errorMsg = exc.msg
       if not(isNil(request)):
         await request.closeWait()
       if not(isNil(redirect)):
@@ -367,6 +382,8 @@ proc requestWithoutBody*(req: HttpClientRequestRef): Future[RestResponse] {.
         await response.closeWait()
       raise exc
     except HttpError as exc:
+      debug "REST client communication error", address,
+            errorName = exc.name, errorMsg = exc.msg
       if not(isNil(request)):
         await request.closeWait()
       if not(isNil(redirect)):
@@ -385,10 +402,13 @@ proc requestWithBody*(req: HttpClientRequestRef,
     redirect: HttpClientRequestRef = nil
     response: HttpClientResponseRef = nil
     writer: HttpBodyWriter = nil
+    address = request.address
     pbuffer = cast[ptr UncheckedArray[byte]](pbytes)
 
   while true:
     try:
+      debug "Sending REST request to remote server", address,
+            http_method = $request.meth
       # Sending HTTP request headers and obtain HTTP request body writer
       writer = await request.open()
       # Sending HTTP request body
@@ -403,6 +423,8 @@ proc requestWithBody*(req: HttpClientRequestRef,
       writer = nil
       # Waiting for response headers
       response = await request.finish()
+      debug "Got REST response headers from remote server",
+            status = response.status, http_method = $request.meth, address
       if response.status >= 300 and response.status < 400:
         # Handling redirection
         redirect =
@@ -436,11 +458,14 @@ proc requestWithBody*(req: HttpClientRequestRef,
             let data = await response.getBodyBytes()
             await response.closeWait()
             response = nil
+            debug "Received REST response body from remote server",
+                  contentType = contentType, size = len(data), address
             RestResponse(status: status, contentType: contentType, data: data)
         return res
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
+      debug "REST request was interrupted", address
       if not(isNil(writer)):
         await writer.closeWait()
       if not(isNil(request)):
@@ -451,6 +476,8 @@ proc requestWithBody*(req: HttpClientRequestRef,
         await response.closeWait()
       raise exc
     except RestError as exc:
+      debug "REST client redirection error", address,
+            errorName = exc.name, errorMsg = exc.msg
       if not(isNil(writer)):
         await writer.closeWait()
       if not(isNil(request)):
@@ -461,6 +488,8 @@ proc requestWithBody*(req: HttpClientRequestRef,
         await response.closeWait()
       raise exc
     except HttpError as exc:
+      debug "REST client communication error", address,
+            errorName = exc.name, errorMsg = exc.msg
       if not(isNil(writer)):
         await writer.closeWait()
       if not(isNil(request)):
