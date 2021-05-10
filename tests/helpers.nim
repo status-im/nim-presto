@@ -1,5 +1,5 @@
 import std/[strutils, parseutils]
-import stew/byteutils
+import stew/[byteutils, base10]
 import ../presto/common
 
 type
@@ -67,6 +67,51 @@ proc decodeString*(t: typedesc[CustomType1],
     err("Unable to decode hex string")
   else:
     err("Unable to decode value")
+
+proc decodeBytes*(t: typedesc[CustomType1], value: openarray[byte],
+                  contentType: string): RestResult[CustomType1] =
+  discard
+
+proc decodeBytes*(t: typedesc[string], value: openarray[byte],
+                  contentType: string): RestResult[string] =
+  var res: string
+  if len(value) > 0:
+    res = newString(len(value))
+    copyMem(addr res[0], unsafeAddr value[0], len(value))
+  ok(res)
+
+proc encodeBytes*(value: CustomType1,
+                  contentType: string): RestResult[seq[byte]] =
+  discard
+
+proc encodeBytes*(value: string,
+                  contentType: string): RestResult[seq[byte]] =
+  var res: seq[byte]
+  if len(value) > 0:
+    res = newSeq[byte](len(value))
+    copyMem(addr res[0], unsafeAddr value[0], len(value))
+  ok(res)
+
+proc encodeString*(value: CustomType1): RestResult[string] =
+  case value.kind
+  of CustomKind.Level1:
+    ok("p1_" & Base10.toString(uint64(value.level1)))
+  of CustomKind.Level2:
+    ok("p2_" & value.level2)
+  of CustomKind.Level3:
+    ok("p3_" & toHex(value.level3))
+
+proc encodeString*(value: int): RestResult[string] =
+  if value < 0:
+    err("Negative integer")
+  else:
+    ok(Base10.toString(uint64(value)))
+
+proc encodeString*(value: string): RestResult[string] =
+  ok(value)
+
+proc encodeString*(value: openarray[byte]): RestResult[string] =
+  ok(toHex(value))
 
 proc decodeString*(t: typedesc[int], value: string): RestResult[int] =
   var v: int

@@ -35,4 +35,3 @@ type
 
   RestError* = object of CatchableError
   RestBadRequestError* = object of RestError
-
