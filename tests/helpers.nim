@@ -80,6 +80,17 @@ proc decodeBytes*(t: typedesc[string], value: openarray[byte],
     copyMem(addr res[0], unsafeAddr value[0], len(value))
   ok(res)
 
+proc decodeBytes*(t: typedesc[int], value: openarray[byte],
+                  contentType: string): RestResult[int] =
+  if len(value) == 0:
+    err("Could not find any integer")
+  else:
+    let res = Base10.decode(uint16, value)
+    if res.isErr():
+      err(res.error())
+    else:
+      ok(int(res.get()))
+
 proc encodeBytes*(value: CustomType1,
                   contentType: string): RestResult[seq[byte]] =
   discard
