@@ -926,6 +926,110 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "RestStatus/PlainResponse/Response[T] test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test/error/410") do () -> RestApiResponse:
+      return RestApiResponse.error(Http410, "ERROR-410")
+    router.api(MethodGet, "/test/error/411") do () -> RestApiResponse:
+      return RestApiResponse.error(Http411, "ERROR-411")
+    router.api(MethodGet, "/test/success/200") do () -> RestApiResponse:
+      return RestApiResponse.response("SUCCESS-200", Http200, "text/text")
+    router.api(MethodGet, "/test/success/204") do () -> RestApiResponse:
+      return RestApiResponse.response("204", Http204, "text/integer")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+
+    proc testStatus1(): RestStatus {.rest, endpoint: "/test/error/410".}
+    proc testStatus2(): RestStatus {.rest, endpoint: "/test/error/411".}
+    proc testStatus3(): RestStatus {.rest, endpoint: "/test/success/200".}
+    proc testStatus4(): RestStatus {.rest, endpoint: "/test/success/204".}
+    proc testStatus5(): RestStatus {.rest, endpoint: "/test/noresource".}
+
+    proc testPlainResponse1(): RestPlainResponse {.
+         rest, endpoint: "/test/error/410".}
+    proc testPlainResponse2(): RestPlainResponse {.
+         rest, endpoint: "/test/error/411".}
+    proc testPlainResponse3(): RestPlainResponse {.
+         rest, endpoint: "/test/success/200".}
+    proc testPlainResponse4(): RestPlainResponse {.
+         rest, endpoint: "/test/success/204".}
+    proc testPlainResponse5(): RestPlainResponse {.rest,
+         endpoint: "/test/noresource".}
+
+    proc testGenericResponse1(): RestResponse[string] {.
+         rest, endpoint: "/test/error/410".}
+    proc testGenericResponse2(): RestResponse[string] {.
+         rest, endpoint: "/test/error/411".}
+    proc testGenericResponse3(): RestResponse[string] {.
+         rest, endpoint: "/test/success/200".}
+    proc testGenericResponse4(): RestResponse[int] {.
+         rest, endpoint: "/test/success/204".}
+    proc testGenericResponse5(): RestResponse[string] {.
+         rest, endpoint: "/test/noresource".}
+
+    var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+
+    let res1 = await client.testStatus1()
+    let res2 = await client.testStatus2()
+    let res3 = await client.testStatus3()
+    let res4 = await client.testStatus4()
+    let res5 = await client.testStatus5()
+
+    check:
+      res1 == RestStatus(410)
+      res2 == RestStatus(411)
+      res3 == RestStatus(200)
+      res4 == RestStatus(204)
+      res5 == RestStatus(404)
+
+    let res6 = await client.testPlainResponse1()
+    let res7 = await client.testPlainResponse2()
+    let res8 = await client.testPlainResponse3()
+    let res9 = await client.testPlainResponse4()
+    let res10 = await client.testPlainResponse5()
+
+    check:
+      res6.status == 410
+      res6.contentType == "text/html"
+      bytesToString(res6.data) == "ERROR-410"
+      res7.status == 411
+      res7.contentType == "text/html"
+      bytesToString(res7.data) == "ERROR-411"
+      res8.status == 200
+      res8.contentType == "text/text"
+      bytesToString(res8.data) == "SUCCESS-200"
+      res9.status == 204
+      res9.contentType == "text/integer"
+      bytesToString(res9.data) == "204"
+      res10.status == 404
+
+    let res11 = await client.testGenericResponse1()
+    let res12 = await client.testGenericResponse2()
+    let res13 = await client.testGenericResponse3()
+    let res14 = await client.testGenericResponse4()
+    let res15 = await client.testGenericResponse5()
+
+    check:
+      res11.status == 410
+      res11.contentType == "text/html"
+      res11.data == "ERROR-410"
+      res12.status == 411
+      res12.contentType == "text/html"
+      res12.data == "ERROR-411"
+      res13.status == 200
+      res13.contentType == "text/text"
+      res13.data == "SUCCESS-200"
+      res14.status == 204
+      res14.contentType == "text/integer"
+      res14.data == 204
+      res15.status == 404
+
+    await client.closeWait()
+    await server.stop()
+    await server.closeWait()
+
   test "Leaks test":
     proc getTrackerLeaks(tracker: string): bool =
       let tracker = getTracker(tracker)
