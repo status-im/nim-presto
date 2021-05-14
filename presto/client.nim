@@ -42,19 +42,6 @@ type
   RestReturnKind {.pure.} = enum
     Status, PlainResponse, GenericResponse, Value
 
-  RestDefect* = object of Defect
-  RestError* = object of CatchableError
-  RestEncodingError* = object of RestError
-    field*: cstring
-  RestDecodingError* = object of RestError
-  RestCommunicationError* = object of RestError
-    exc*: ref HttpError
-  RestRedirectionError* = object of RestError
-  RestResponseError* = object of RestError
-    status*: int
-    contentType*: string
-    message*: string
-
 const
   RestContentTypeArg = "restContentType"
   RestAcceptTypeArg = "restAcceptType"

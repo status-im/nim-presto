@@ -42,6 +42,20 @@ type
 
   ByteChar* = string | seq[byte]
 
+  RestDefect* = object of Defect
+  RestError* = object of CatchableError
+  RestBadRequestError* = object of RestError
+  RestEncodingError* = object of RestError
+    field*: cstring
+  RestDecodingError* = object of RestError
+  RestCommunicationError* = object of RestError
+    exc*: ref HttpError
+  RestRedirectionError* = object of RestError
+  RestResponseError* = object of RestError
+    status*: int
+    contentType*: string
+    message*: string
+
 proc error*(t: typedesc[RestApiResponse],
             status: HttpCode = Http200, msg: string = "",
             contentType: string = "text/html"): RestApiResponse =
