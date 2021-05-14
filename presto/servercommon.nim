@@ -32,6 +32,3 @@ chronicles.expandIt(RestApiError):
 type
   RestServerState* {.pure.} = enum
     Closed, Stopped, Running
-
-  RestError* = object of CatchableError
-  RestBadRequestError* = object of RestError
