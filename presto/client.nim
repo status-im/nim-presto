@@ -8,7 +8,7 @@
 #              MIT license (LICENSE-MIT)
 import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
-import chronicles
+import chronicles except error
 import httputils, stew/base10
 import segpath, common, macrocommon, agent
 export httpclient, httptable, httpcommon, options, agent, httputils
@@ -19,8 +19,10 @@ template meth*(v: HttpMethod) {.pragma.}
 type
   RestClient* = object of RootObj
     session: HttpSessionRef
-    address: HttpAddress
+    address*: HttpAddress
     agent: string
+
+  RestClientRef* = ref RestClient
 
   RestPlainResponse* = object
     status*: int
@@ -39,8 +41,6 @@ type
 
   RestReturnKind {.pure.} = enum
     Status, PlainResponse, GenericResponse, Value
-
-  RestClientRef* = ref RestClient
 
   RestDefect* = object of Defect
   RestError* = object of CatchableError
