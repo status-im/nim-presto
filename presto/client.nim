@@ -21,6 +21,7 @@ type
     session: HttpSessionRef
     address*: HttpAddress
     agent: string
+    flags: RestClientFlags
 
   RestClientRef* = ref RestClient
 
@@ -35,6 +36,11 @@ type
     data*: T
 
   RestStatus* = distinct int
+
+  RestClientFlag* {.pure.} = enum
+    CommaSeparatedArray
+
+  RestClientFlags* = set[RestClientFlag]
 
   RestRequestFlag* {.pure.} = enum
     ConsumeBody
@@ -60,7 +66,8 @@ proc `$`*(x: RestStatus): string {.borrow.}
 
 proc new*(t: typedesc[RestClientRef],
           url: string,
-          flags: HttpClientFlags = {},
+          flags: RestClientFlags = {},
+          httpFlags: HttpClientFlags = {},
           maxConnections: int = -1,
           maxRedirections: int = HttpMaxRedirections,
           connectTimeout = HttpConnectTimeout,
@@ -68,7 +75,7 @@ proc new*(t: typedesc[RestClientRef],
           bufferSize: int = 4096,
           userAgent = PrestoIdent
          ): RestResult[RestClientRef] =
-  let session = HttpSessionRef.new(flags, maxRedirections, connectTimeout,
+  let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections)
   var uri = parseUri(url)
   uri.path = ""
@@ -81,12 +88,14 @@ proc new*(t: typedesc[RestClientRef],
       if res.isErr():
         return err("Unable to resolve remote hostname")
       res.get()
-  ok(RestClientRef(session: session, address: address, agent: userAgent))
+  ok(RestClientRef(session: session, address: address, agent: userAgent,
+                   flags: flags))
 
 proc new*(t: typedesc[RestClientRef],
           ta: TransportAddress,
           scheme: HttpClientScheme = HttpClientScheme.NonSecure,
-          flags: HttpClientFlags = {},
+          flags: RestClientFlags = {},
+          httpFlags: HttpClientFlags = {},
           maxConnections: int = -1,
           maxRedirections: int = HttpMaxRedirections,
           connectTimeout = HttpConnectTimeout,
@@ -94,10 +103,11 @@ proc new*(t: typedesc[RestClientRef],
           bufferSize: int = 4096,
           userAgent = PrestoIdent
          ): RestClientRef =
-  let session = HttpSessionRef.new(flags, maxRedirections, connectTimeout,
+  let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections)
   let address = ta.getAddress(scheme, "")
-  RestClientRef(session: session, address: address, agent: userAgent)
+  RestClientRef(session: session, address: address, agent: userAgent,
+                flags: flags)
 
 proc closeWait*(client: RestClientRef) {.async.} =
   await client.session.closeWait()
@@ -674,16 +684,31 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
         statements.add quote do:
           let `encodedName` =
             block:
-              var res: seq[string]
-              for item in `paramName`.items():
-                let eres = encodeString(item)
-                if eres.isErr():
-                  raiseRestEncodingStringError(`paramLiteral`)
-                var sres = `paramLiteral`
-                sres.add('=')
-                sres.add(encodeUrl(eres.get(), true))
-                res.add(sres)
-              res.join("&")
+              if RestClientFlag.CommaSeparatedArray in `clientIdent`.flags:
+                var res: seq[string]
+                for item in `paramName`.items():
+                  let eres = encodeString(item)
+                  if eres.isErr():
+                    raiseRestEncodingStringError(`paramLiteral`)
+                  res.add(encodeUrl(eres.get(), true))
+                if len(res) > 0:
+                  var sres = `paramLiteral`
+                  sres.add('=')
+                  sres.add(res.join(","))
+                  sres
+                else:
+                  ""
+              else:
+                var res: seq[string]
+                for item in `paramName`.items():
+                  let eres = encodeString(item)
+                  if eres.isErr():
+                    raiseRestEncodingStringError(`paramLiteral`)
+                  var sres = `paramLiteral`
+                  sres.add('=')
+                  sres.add(encodeUrl(eres.get(), true))
+                  res.add(sres)
+                res.join("&")
     else:
       statements.add quote do:
         let `encodedName` =
