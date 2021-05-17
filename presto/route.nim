@@ -287,7 +287,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
               block:
                 var sres: seq[`seqType`]
                 var errorMsg: cstring = nil
-                for index, item in `queryParams`.getList(`strName`).pairs():
+                for item in `queryParams`.getList(`strName`).items():
                   let res = decodeString(`seqType`, item)
                   if res.isErr():
                     errorMsg = res.error()
