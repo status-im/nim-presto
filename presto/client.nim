@@ -18,7 +18,7 @@ template meth*(v: HttpMethod) {.pragma.}
 
 type
   RestClient* = object of RootObj
-    session: HttpSessionRef
+    session*: HttpSessionRef
     address*: HttpAddress
     agent: string
     flags: RestClientFlags
@@ -195,6 +195,17 @@ proc raiseRestCommunicationError*(exc: ref HttpError) {.
   error.exc = exc
   raise error
 
+proc raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
+     noreturn, noinline.} =
+  var msg = "Communication failed while sending request's body"
+  msg.add(", stream error [")
+  msg.add(exc.name)
+  msg.add("]: ")
+  msg.add(exc.msg)
+  var error = newException(RestCommunicationError, msg)
+  error.exc = exc
+  raise error
+
 proc raiseRestResponseError*(resp: RestPlainResponse) {.
      noreturn, noinline.} =
   var msg = "Unsuccessfull response received"
@@ -326,6 +337,31 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
 
   procdef
 
+template closeObjects(o1, o2, o3: untyped): untyped =
+  if not(isNil(o1)):
+    await o1.closeWait()
+    o1 = nil
+  if not(isNil(o2)):
+    await o2.closeWait()
+    o2 = nil
+  if not(isNil(o3)):
+    await o3.closeWait()
+    o3 = nil
+
+template closeObjects(o1, o2, o3, o4: untyped): untyped =
+  if not(isNil(o1)):
+    await o1.closeWait()
+    o1 = nil
+  if not(isNil(o2)):
+    await o2.closeWait()
+    o2 = nil
+  if not(isNil(o3)):
+    await o3.closeWait()
+    o3 = nil
+  if not(isNil(o4)):
+    await o4.closeWait()
+    o4 = nil
+
 proc requestWithoutBody*(req: HttpClientRequestRef,
                       flags: set[RestRequestFlag]): Future[RestPlainResponse] {.
      async.} =
@@ -388,32 +424,17 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
       debug "REST client request was interrupted", address
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(request, redirect, response)
       raise exc
     except RestError as exc:
       debug "REST client redirection error", address,
             errorName = exc.name, errorMsg = exc.msg
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(request, redirect, response)
       raise exc
     except HttpError as exc:
       debug "REST client communication error", address,
             errorName = exc.name, errorMsg = exc.msg
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(request, redirect, response)
       raiseRestCommunicationError(exc)
 
 proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
@@ -435,6 +456,8 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
             http_method = $request.meth
       # Sending HTTP request headers and obtain HTTP request body writer
       writer = await request.open()
+      debug "Opened connection to remote server", address,
+            http_method = $request.meth
       # Sending HTTP request body
       var offset = 0'u64
       while offset < nbytes:
@@ -498,39 +521,31 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
       debug "REST request was interrupted", address
-      if not(isNil(writer)):
-        await writer.closeWait()
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(writer, request, redirect, response)
       raise exc
     except RestError as exc:
       debug "REST client redirection error", address,
             errorName = exc.name, errorMsg = exc.msg
-      if not(isNil(writer)):
-        await writer.closeWait()
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(writer, request, redirect, response)
       raise exc
     except HttpError as exc:
       debug "REST client communication error", address,
             errorName = exc.name, errorMsg = exc.msg
-      if not(isNil(writer)):
-        await writer.closeWait()
-      if not(isNil(request)):
-        await request.closeWait()
-      if not(isNil(redirect)):
-        await redirect.closeWait()
-      if not(isNil(response)):
-        await response.closeWait()
+      closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
+    except AsyncStreamError as exc:
+      # Because `HttpBodyWriter` is actually `AsyncStream` it could raise
+      # `AsyncStreamError` exception. This can happen when we sending request's
+      # body.
+      debug "REST client communication error", address,
+            errorName = exc.name, errorMsg = exc.msg
+      closeObjects(writer, request, redirect, response)
+      raiseRestCommunicationError(exc)
+    except CatchableError as exc:
+      debug "REST client got an unexpected error", address,
+            errorName = exc.name, errorMsg = exc.msg
+      closeObjects(writer, request, redirect, response)
+      raise(exc)
 
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   if prc.kind notin {nnkProcDef}:

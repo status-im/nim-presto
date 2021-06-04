@@ -49,7 +49,7 @@ type
     field*: cstring
   RestDecodingError* = object of RestError
   RestCommunicationError* = object of RestError
-    exc*: ref HttpError
+    exc*: ref CatchableError
   RestRedirectionError* = object of RestError
   RestResponseError* = object of RestError
     status*: int
