@@ -424,7 +424,7 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
       debug "REST client request was interrupted", address
-      closeObjects3(request, redirect, response)
+      closeObjects(request, redirect, response)
       raise exc
     except RestError as exc:
       debug "REST client redirection error", address,
