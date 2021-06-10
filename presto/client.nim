@@ -391,16 +391,14 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
                 raiseRestRedirectionError("Location header with an empty value")
             else:
               raiseRestRedirectionError("Location header missing")
+        discard await response.consumeBody()
         await request.closeWait()
         request = nil
-        discard await response.consumeBody()
         await response.closeWait()
         response = nil
         request = redirect
         redirect = nil
       else:
-        await request.closeWait()
-        request = nil
         let res =
           block:
             let status = response.status
@@ -413,6 +411,8 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
                   default
                 else:
                   await response.getBodyBytes()
+            await request.closeWait()
+            request = nil
             await response.closeWait()
             response = nil
             debug "Received REST response body from remote server",
@@ -487,17 +487,15 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
                 raiseRestRedirectionError("Location header with an empty value")
             else:
               raiseRestRedirectionError("Location header missing")
-        await request.closeWait()
-        request = nil
         # We do not care about response body in redirection.
         discard await response.consumeBody()
+        await request.closeWait()
+        request = nil
         await response.closeWait()
         response = nil
         request = redirect
         redirect = nil
       else:
-        await request.closeWait()
-        request = nil
         let res =
           block:
             let status = response.status
@@ -510,6 +508,8 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
                   default
                 else:
                   await response.getBodyBytes()
+            await request.closeWait()
+            request = nil
             await response.closeWait()
             response = nil
             debug "Received REST response body from remote server",
