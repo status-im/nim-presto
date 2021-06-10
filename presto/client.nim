@@ -399,8 +399,6 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
         request = redirect
         redirect = nil
       else:
-        await request.closeWait()
-        request = nil
         let res =
           block:
             let status = response.status
@@ -413,6 +411,8 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
                   default
                 else:
                   await response.getBodyBytes()
+            await request.closeWait()
+            request = nil
             await response.closeWait()
             response = nil
             debug "Received REST response body from remote server",
@@ -496,8 +496,6 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
         request = redirect
         redirect = nil
       else:
-        await request.closeWait()
-        request = nil
         let res =
           block:
             let status = response.status
@@ -510,6 +508,8 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
                   default
                 else:
                   await response.getBodyBytes()
+            await request.closeWait()
+            request = nil
             await response.closeWait()
             response = nil
             debug "Received REST response body from remote server",
