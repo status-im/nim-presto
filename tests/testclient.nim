@@ -1062,7 +1062,6 @@ suite "REST API client test suite":
         else:
           "nobody"
       let preferred = preferredContentType("app/type1", "app/type2")
-      echo "PREFERRED ==== ", preferred
       return
         if preferred.isOk():
           case preferred.get()
