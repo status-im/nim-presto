@@ -1051,6 +1051,89 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "Accept test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost, "/test/accept") do (
+      contentBody: Option[ContentBody]) -> RestApiResponse:
+      let obody =
+        if contentBody.isSome():
+          let b = contentBody.get()
+          b.contentType & "," & bytesToString(b.data)
+        else:
+          "nobody"
+      let preferred = preferredContentType("app/type1", "app/type2")
+      echo "PREFERRED ==== ", preferred
+      return
+        if preferred.isOk():
+          case preferred.get()
+          of "app/type1":
+            RestApiResponse.response("type1[" & obody & "]")
+          of "app/type2":
+            RestApiResponse.response("type2[" & obody & "]")
+          else:
+            # This MUST not be happened.
+            RestApiResponse.error(Http407, "")
+        else:
+          RestApiResponse.error(Http406, "")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+
+    proc testAccept1(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost,
+      accept: "*/*".}
+    proc testAccept2(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost,
+      accept: "app/type1,app/type2".}
+    proc testAccept3(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost,
+      accept: "app/type2".}
+    proc testAccept4(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost,
+      accept: "app/type2;q=0.5,app/type1;q=0.7".}
+    proc testAccept5(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost,
+      accept: "app/type2".}
+    proc testAccept6(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/accept", meth: MethodPost.}
+
+    var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+
+    let res1 = await client.testAccept1("accept1")
+    let res2 = await client.testAccept2("accept2")
+    let res3 = await client.testAccept3("accept3")
+    let res4 = await client.testAccept4("accept4")
+    let res5 = await client.testAccept5("accept5")
+    # This procedure is missing `accept` pragma in definition, so default
+    # accept will be used `application/json`.
+    let res6 = await client.testAccept6("accept6")
+    let res7 = await client.testAccept6("accept7",
+      restAcceptType = "app/type1;q=1.0,app/type2;q=0.1")
+    let res8 = await client.testAccept6("accept8",
+      restAcceptType = "")
+
+    check:
+      res1.status == 200
+      res2.status == 200
+      res3.status == 200
+      res4.status == 200
+      res5.status == 200
+      res6.status == 406
+      res7.status == 200
+      res8.status == 200
+      res1.data.bytesToString() == "type1[application/json,accept1]"
+      res2.data.bytesToString() == "type1[application/json,accept2]"
+      res3.data.bytesToString() == "type2[application/json,accept3]"
+      res4.data.bytesToString() == "type1[application/json,accept4]"
+      res5.data.bytesToString() == "type2[application/json,accept5]"
+      res7.data.bytesToString() == "type1[application/json,accept7]"
+      res8.data.bytesToString() == "type1[application/json,accept8]"
+
+    await client.closeWait()
+    await server.stop()
+    await server.closeWait()
+
   test "Leaks test":
     proc getTrackerLeaks(tracker: string): bool =
       let tracker = getTracker(tracker)
