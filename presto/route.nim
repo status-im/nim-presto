@@ -256,7 +256,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
       for (paramName, paramType) in pathArguments:
         let strName = newStrLitNode(paramName.strVal)
         res.add(quote do:
-          let `paramName`: Result[`paramType`, cstring] =
+          let `paramName` {.used.}: Result[`paramType`, cstring] =
             decodeString(`paramType`, `pathParams`.getString(`strName`))
         )
       res
@@ -271,7 +271,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
           # Optional arguments which has type `Option[T]`.
           let optType = getOptionType(paramType)
           res.add(quote do:
-            let `paramName`: Option[Result[`optType`, cstring]] =
+            let `paramName` {.used.}: Option[Result[`optType`, cstring]] =
               if `strName` notin `queryParams`:
                 none[Result[`optType`, cstring]]()
               else:
@@ -283,7 +283,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
           # Optional arguments which has type `seq[T]`.
           let seqType = getSequenceType(paramType)
           res.add(quote do:
-            let `paramName`: Result[`paramType`, cstring] =
+            let `paramName` {.used.}: Result[`paramType`, cstring] =
               block:
                 var sres: seq[`seqType`]
                 var errorMsg: cstring = nil
@@ -307,7 +307,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
       var res = newStmtList()
       if not(isNil(bodyArgument)):
         res.add(quote do:
-          let `bodyArgument`: Option[ContentBody] = `bodyParam`
+          let `bodyArgument` {.used.}: Option[ContentBody] = `bodyParam`
         )
       res
 
@@ -317,7 +317,8 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
       var res = newStmtList()
       if not(isNil(respArgument)):
         res.add(quote do:
-          let `respArgument`: HttpResponseRef = `requestParam`.getResponse()
+          let `respArgument` {.used.}: HttpResponseRef =
+            `requestParam`.getResponse()
         )
       res
 
