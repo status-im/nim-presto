@@ -120,7 +120,6 @@ proc processRestRequest*[T](server: T,
                     status = restRes.status,
                     meth = $request.meth, peer = $request.remoteAddress(),
                     uri = $request.uri, location = restRes.location
-              var uri = request.uri
               let location =
                 block:
                   var uri = parseUri(restRes.location)
