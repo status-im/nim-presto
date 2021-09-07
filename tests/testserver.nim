@@ -12,12 +12,15 @@ type
     data*: string
 
 proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
-                body: string, ctype = ""): Future[ClientResponse] {.async.} =
+                body: string, ctype = "",
+                accept = ""): Future[ClientResponse] {.async.} =
   var request = $meth & " " & $parseUri(url) & " HTTP/1.1\r\n"
   request.add("Host: " & $server & "\r\n")
   request.add("Content-Length: " & $len(body) & "\r\n")
   if len(ctype) > 0:
     request.add("Content-Type: " & ctype & "\r\n")
+  if len(accept) > 0:
+    request.add("Accept: " & accept & "\r\n")
   request.add("\r\n")
 
   if len(body) > 0:
@@ -527,6 +530,82 @@ suite "REST API server test suite":
 
     finally:
       await server.closeWait()
+
+  asyncTest "preferredContentType() test":
+    const PostVectors = [
+      (
+        ("/test/post", "somebody0908", "text/html",
+        "app/type1;q=0.9,app/type2;q=0.8"),
+        ClientResponse(status: 200, data: "type1[text/html,somebody0908]")
+      ),
+      (
+        ("/test/post", "somebody0908", "text/html",
+        "app/type2;q=0.8,app/type1;q=0.9"),
+        ClientResponse(status: 200, data: "type1[text/html,somebody0908]")
+      ),
+      (
+        ("/test/post", "somebody09", "text/html",
+         "app/type2,app/type1;q=0.9"),
+        ClientResponse(status: 200, data: "type2[text/html,somebody09]")
+      ),
+      (
+        ("/test/post", "somebody09", "text/html", "app/type1;q=0.9,app/type2"),
+        ClientResponse(status: 200, data: "type2[text/html,somebody09]")
+      ),
+      (
+        ("/test/post", "somebody", "text/html", "*/*"),
+        ClientResponse(status: 200, data: "type1[text/html,somebody]")
+      ),
+      (
+        ("/test/post", "somebody", "text/html", ""),
+        ClientResponse(status: 200, data: "type1[text/html,somebody]")
+      ),
+      (
+        ("/test/post", "somebody", "text/html", "app/type2"),
+        ClientResponse(status: 200, data: "type2[text/html,somebody]")
+      ),
+      (
+        ("/test/post", "somebody", "text/html", "app/type3"),
+        ClientResponse(status: 406, data: "")
+      )
+    ]
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost, "/test/post") do (
+      body: Option[ContentBody], resp: HttpResponseRef) -> RestApiResponse:
+      let obody =
+        if body.isSome():
+          let b = body.get()
+          b.contentType & "," & bytesToString(b.data)
+        else:
+          "nobody"
+
+      let preferred = preferredContentType("app/type1", "app/type2")
+      return
+        if preferred.isOk():
+          case preferred.get()
+          of "app/type1":
+            RestApiResponse.response("type1[" & obody & "]")
+          of "app/type2":
+            RestApiResponse.response("type2[" & obody & "]")
+          else:
+            # This MUST not be happened.
+            RestApiResponse.error(Http407, "")
+        else:
+          RestApiResponse.error(Http406, "")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      for item in PostVectors:
+        let res = await httpClient(serverAddress, MethodPost, item[0][0],
+                                   item[0][1], item[0][2], item[0][3])
+        check:
+          res.status == item[1].status
+          res.data == item[1].data
+    finally:
+      await server.closeWait()
+
 
   test "Leaks test":
     check:

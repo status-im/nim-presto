@@ -15,6 +15,7 @@ export httpclient, httptable, httpcommon, options, agent, httputils
 
 template endpoint*(v: string) {.pragma.}
 template meth*(v: HttpMethod) {.pragma.}
+template accept*(v: string) {.pragma.}
 
 type
   RestClient* = object of RootObj
@@ -49,6 +50,7 @@ type
     Status, PlainResponse, GenericResponse, Value
 
 const
+  DefaultAcceptContentType = "application/json"
   RestContentTypeArg = "restContentType"
   RestAcceptTypeArg = "restAcceptType"
   RestClientArg = "restClient"
@@ -158,6 +160,15 @@ proc getMethodOrDefault(prc: NimNode,
         return node[1]
   return default
 
+proc getAcceptOrDefault(prc: NimNode,
+                        default: string): string {.compileTime.} =
+  let pragmaNode = prc.pragma()
+  for node in pragmaNode.items():
+    if node.kind == nnkExprColonExpr:
+      if node[0].kind == nnkIdent and node[0].strVal == "accept":
+        return node[1].strVal()
+  return default
+
 proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
@@ -255,6 +266,7 @@ proc isPostMethod(node: NimNode): bool {.compileTime.} =
 proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
                              contentIdent: NimNode,
                              acceptIdent: NimNode,
+                             acceptValue: NimNode,
                              stmtList: NimNode): NimNode {.compileTime.} =
   var procdef = copyNimTree(prc)
   var parameters = copyNimTree(prc.findChild(it.kind == nnkFormalParams))
@@ -267,7 +279,7 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
             newStrLitNode("application/json"))
   let acceptTypeArg =
     newTree(nnkIdentDefs, acceptIdent, newIdentNode("string"),
-            newStrLitNode("application/json"))
+            acceptValue)
 
   let asyncPragmaArg = newIdentNode("async")
 
@@ -607,6 +619,14 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
               prc.pragma())
       res
 
+  let accept =
+    block:
+      let res = prc.getAcceptOrDefault(DefaultAcceptContentType)
+      if len(res) == 0:
+        error("REST procedure should have non-empty {.accept.} pragma",
+              prc.pragma())
+      res
+
   let meth = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
                                                ident("MethodGet")))
   let spath = SegmentedPath.init(HttpMethod.MethodGet, endpoint, nil)
@@ -863,7 +883,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       return `responseResultIdent`
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
-                                    acceptTypeIdent, statements)
+                                    acceptTypeIdent, newStrLitNode(accept),
+                                    statements)
   res
 
 macro rest*(prc: untyped): untyped =

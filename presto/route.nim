@@ -327,7 +327,9 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
                   `queryParams`: HttpTable, `bodyParam`: Option[ContentBody]
                  ): Future[RestApiResponse] {.raises: [Defect], async.} =
-
+      template preferredContentType(
+                         t: varargs[string]): Result[string, cstring] {.used.} =
+        `requestParam`.preferredContentType(t)
       `pathDecoder`
       `optDecoder`
       `respDecoder`
