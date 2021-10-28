@@ -78,6 +78,39 @@ suite "REST API router & macro tests":
       bytesToString(r3.content.data) == "ok-3"
       bytesToString(r4.content.data) == "ok-4"
 
+  test "Reserved keywords as parameters test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet,
+               "/test/keyword_args/1/{let}") do (
+      `let`: int) -> RestApiResponse:
+        let l = `let`.get()
+        if (l == 999999):
+          return RestApiResponse.response("ok-1", contentType = "test/test")
+
+    router.api(MethodGet,
+               "/test/keyword_args/2/{let}") do (
+      `let`: int,
+      `var`, `block`, `addr`, `custom`: Option[int]) -> RestApiResponse:
+        let l = `let`.get()
+        let v = `var`.get().get()
+        let b = `block`.get().get()
+        let a = `addr`.get().get()
+        let c = custom.get().get()
+        if (l == 888888) and (v == 777777) and (b == 666666) and
+           (a == 555555) and (c == 444444):
+          return RestApiResponse.response("ok-2", contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/keyword_args/1/999999")
+    let r2 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/keyword_args/2/888888" &
+      "?var=777777&block=666666&addr=555555&custom=444444")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-1"
+      r2.kind == RestApiResponseKind.Content
+      bytesToString(r2.content.data) == "ok-2"
+
   test "Basic types as parameters test":
     var router = RestRouter.init(testValidate)
     router.api(MethodGet,
