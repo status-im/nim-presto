@@ -166,6 +166,8 @@ proc testValidate*(pattern: string, value: string): int =
       0
     of "{smp3}":
       if value.match({'0' .. '9', 'a' .. 'f', 'A' .. 'F', 'x'}): 0 else: 1
+    of "{let}":
+      if value.match({'0' .. '9'}): 0 else: 1
     else:
       1
   res

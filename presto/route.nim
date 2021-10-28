@@ -254,7 +254,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
     block:
       var res = newStmtList()
       for (paramName, paramType) in pathArguments:
-        let strName = newStrLitNode(paramName.strVal)
+        let strName = newStrLitNode($paramName)
         res.add(quote do:
           let `paramName` {.used.}: Result[`paramType`, cstring] =
             decodeString(`paramType`, `pathParams`.getString(`strName`))
@@ -266,7 +266,7 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
     block:
       var res = newStmtList()
       for (paramName, paramType) in optionalArguments:
-        let strName = newStrLitNode(paramName.strVal)
+        let strName = newStrLitNode($paramName)
         if isOptionalArg(paramType):
           # Optional arguments which has type `Option[T]`.
           let optType = getOptionType(paramType)
