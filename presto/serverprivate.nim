@@ -148,7 +148,7 @@ proc processRestRequest*[T](server: T,
                error_name = $exc.name
           return dumbResponse()
       else:
-        debug "Request it not part of api", peer = $request.remoteAddress(),
+        debug "Request is not part of API", peer = $request.remoteAddress(),
               meth = $request.meth, uri = $request.uri
         return await request.respond(Http404, "", HttpTable.init())
     else:
