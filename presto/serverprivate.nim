@@ -44,24 +44,27 @@ proc processRestRequest*[T](server: T,
         let queryParams = request.query
 
         let optBody =
-          try:
-            await request.getContentBody()
-          except HttpCriticalError as exc:
-            debug "Unable to obtain request body", uri = $request.uri,
-                  peer = $request.remoteAddress(), meth = $request.meth,
-                  error_msg = $exc.msg
-            return await request.respond(Http400)
-          except RestBadRequestError as exc:
-            debug "Request has incorrect content type", uri = $request.uri,
-                   peer = $request.remoteAddress(), meth = $request.meth,
-                   error_msg = $exc.msg
-            return await request.respond(Http400)
-          except CatchableError as exc:
-            warn "Unexpected exception while getting request body",
-                  uri = $request.uri, peer = $request.remoteAddress(),
-                  meth = $request.meth, error_name = $exc.name,
-                  error_msg = $exc.msg
-            return await request.respond(Http400)
+          if RestRouterFlag.Raw notin route.flags:
+            try:
+              await request.getContentBody()
+            except HttpCriticalError as exc:
+              debug "Unable to obtain request body", uri = $request.uri,
+                    peer = $request.remoteAddress(), meth = $request.meth,
+                    error_msg = $exc.msg
+              return await request.respond(Http400)
+            except RestBadRequestError as exc:
+              debug "Request has incorrect content type", uri = $request.uri,
+                     peer = $request.remoteAddress(), meth = $request.meth,
+                     error_msg = $exc.msg
+              return await request.respond(Http400)
+            except CatchableError as exc:
+              warn "Unexpected exception while getting request body",
+                    uri = $request.uri, peer = $request.remoteAddress(),
+                    meth = $request.meth, error_name = $exc.name,
+                    error_msg = $exc.msg
+              return await request.respond(Http400)
+          else:
+            none[ContentBody]()
 
         debug "Serving API request", peer = $request.remoteAddress(),
               meth = $request.meth, uri = $request.uri,
