@@ -606,6 +606,27 @@ suite "REST API server test suite":
     finally:
       await server.closeWait()
 
+  asyncTest "Handle raw requests inside api handler test":
+    var router = RestRouter.init(testValidate)
+    router.rawApi(MethodPost, "/test/post") do () -> RestApiResponse:
+      let contentType = request.headers.getString(ContentTypeHeader)
+      let acceptType = request.headers.getString(AcceptHeaderName)
+      let body = await request.getBody()
+      return
+        RestApiResponse.response(
+          "type[" & contentType & ":" & body.toHex() & "]")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      let res = await httpClient(serverAddress, MethodPost, "/test/post",
+                                 "0123456789", "application/octet-stream")
+      check:
+        res.status == 200
+        res.data == "type[application/octet-stream:30313233343536373839]"
+    finally:
+      await server.closeWait()
 
   test "Leaks test":
     check:

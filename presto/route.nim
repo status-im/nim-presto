@@ -23,10 +23,14 @@ type
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
 
+  RestRouterFlag* {.pure.} = enum
+    Raw
+
   RestRoute* = object
     requestPath*: SegmentedPath
     routePath*: SegmentedPath
     callback*: RestApiCallback
+    flags*: set[RestRouterFlag]
 
   RestRouteItem* = object
     case kind*: RestRouteKind
@@ -37,6 +41,7 @@ type
     of RestRouteKind.Redirect:
       redirectPath*: SegmentedPath
     path: SegmentedPath
+    flags*: set[RestRouterFlag]
 
   RestRouter* = object
     patternCallback*: PatternCallback
@@ -50,17 +55,22 @@ proc init*(t: typedesc[RestRouter],
              routes: initBTree[SegmentedPath, RestRouteItem]())
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback) {.raises: [Defect].} =
+               flags: set[RestRouterFlag], handler: RestApiCallback) {.
+     raises: [Defect].} =
   let spath = SegmentedPath.init(request, path, rr.patternCallback)
   let route = rr.routes.getOrDefault(spath,
                                      RestRouteItem(kind: RestRouteKind.None))
   case route.kind
   of RestRouteKind.None:
     let item = RestRouteItem(kind: RestRouteKind.Handler,
-                           path: spath, callback: handler)
+                             path: spath, flags: flags, callback: handler)
     rr.routes.add(spath, item)
   else:
     raiseAssert("The route is already in the routing table")
+
+proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+               handler: RestApiCallback) {.raises: [Defect].} =
+  addRoute(rr, request, path, {}, handler)
 
 proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
                   dstPath: string) {.raises: [Defect].} =
@@ -88,7 +98,7 @@ proc getRoute*(rr: RestRouter,
     of RestRouteKind.Handler:
       # Route handler was found
       let item = RestRoute(requestPath: path, routePath: route.path,
-                           callback: route.callback)
+                           flags: route.flags, callback: route.callback)
       return some(item)
     of RestRouteKind.Redirect:
       # Route redirection was found, so we perform path transformation
@@ -149,8 +159,9 @@ macro redirect*(router: RestRouter, meth: static[HttpMethod],
     echo "\n", fromPath, ": ", repr(res)
   return res
 
-macro api*(router: RestRouter, meth: static[HttpMethod],
-           path: static[string], body: untyped): untyped =
+proc processApiCall(router: NimNode, meth: HttpMethod,
+                    path: string, flags: set[RestRouterFlag],
+                    body: NimNode): NimNode {.compileTime.} =
   ## Define REST API endpoint and implementation.
   ## Input and return parameters are defined using the ``do`` notation.
   ## For example:
@@ -337,8 +348,16 @@ macro api*(router: RestRouter, meth: static[HttpMethod],
       block:
         `procBody`
 
-    `router`.addRoute(`methIdent`, `path`, `doMain`)
+    `router`.addRoute(`methIdent`, `path`, `flags`, `doMain`)
 
   when defined(nimDumpRest):
     echo "\n", path, ": ", repr(res)
   return res
+
+macro api*(router: RestRouter, meth: static[HttpMethod],
+           path: static[string], body: untyped): untyped =
+  return processApiCall(router, meth, path, {}, body)
+
+macro rawApi*(router: RestRouter, meth: static[HttpMethod],
+              path: static[string], body: untyped): untyped =
+  return processApiCall(router, meth, path, {RestRouterFlag.Raw}, body)
