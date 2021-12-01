@@ -405,9 +405,10 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
             else:
               raiseRestRedirectionError("Location header missing")
         discard await response.consumeBody()
+        let redirectAddress = redirect.address
         debug "Got HTTP redirection from remote server",
               status = response.status, http_method = $request.meth,
-              redirect.address, conn_id = request.connection.id
+              conn_id = request.connection.id, redirectAddress
         await request.closeWait()
         request = nil
         await response.closeWait()
@@ -428,9 +429,9 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
                 else:
                   await response.getBodyBytes()
             debug "Received REST response body from remote server",
-                  status = response.status, http_method = $request.methaddress,
-                  conn_id = request.connection.id, contentType = contentType,
-                  size = len(data)
+                  status = response.status, http_method = $request.meth,
+                  address, conn_id = request.connection.id,
+                  contentType = contentType, size = len(data)
             await request.closeWait()
             request = nil
             await response.closeWait()
