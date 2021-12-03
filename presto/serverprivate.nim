@@ -101,7 +101,7 @@ proc processRestRequest*[T](server: T,
               let headers = HttpTable.init([("Content-Type",
                                             restRes.content.contentType)])
               debug "Received response from handler",
-                    status = restRes.status,
+                    status = restRes.status.toInt(),
                     meth = $request.meth, peer = $request.remoteAddress(),
                     uri = $request.uri,
                     content_type = restRes.content.contentType,
@@ -111,7 +111,7 @@ proc processRestRequest*[T](server: T,
             of RestApiResponseKind.Error:
               let error = restRes.errobj
               debug "Received error response from handler",
-                    status = restRes.status,
+                    status = restRes.status.toInt(),
                     meth = $request.meth, peer = $request.remoteAddress(),
                     uri = $request.uri, error
               let headers = HttpTable.init([("Content-Type",
@@ -120,7 +120,7 @@ proc processRestRequest*[T](server: T,
                                            headers)
             of RestApiResponseKind.Redirect:
               debug "Received redirection from handler",
-                    status = restRes.status,
+                    status = restRes.status.toInt(),
                     meth = $request.meth, peer = $request.remoteAddress(),
                     uri = $request.uri, location = restRes.location
               let location =
