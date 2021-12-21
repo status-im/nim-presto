@@ -57,6 +57,12 @@ suite "REST API client test suite":
           "nobody"
       return RestApiResponse.response(obody)
 
+    router.api(MethodGet, "/test/echo-authorization") do () -> RestApiResponse:
+      return RestApiResponse.response(request.headers.getString("Authorization"))
+
+    router.api(MethodPost, "/test/echo-authorization") do () -> RestApiResponse:
+      return RestApiResponse.response(request.headers.getString("Authorization"))
+
     let serverFlags = {HttpServerFlags.NotifyDisconnect,
                        HttpServerFlags.QueryCommaSeparatedArray}
     var sres = RestServerRef.new(router, serverAddress,
@@ -74,6 +80,12 @@ suite "REST API client test suite":
                                  meth: HttpMethod.MethodGet.}
     proc testSimple6(body: string): string {.rest, endpoint: "/test/simple/6",
                                              meth: HttpMethod.MethodPost.}
+
+    proc testEchoAuthorizationPost(body: string): string
+      {.rest, endpoint: "/test/echo-authorization", meth: HttpMethod.MethodPost.}
+
+    proc testEchoAuthorizationGet(): string
+      {.rest, endpoint: "/test/echo-authorization", meth: HttpMethod.MethodGet.}
 
     var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
     let res1 = await client.testSimple1()
@@ -116,6 +128,15 @@ suite "REST API client test suite":
         code == 505
         message == "Different error"
         contentType == "application/error"
+
+    block:
+      let postRes = await client.testEchoAuthorizationPost(
+        body = "{}",
+        extraHeaders = @[("Authorization", "Bearer XXX")])
+      check postRes == "Bearer XXX"
+
+      let getRes = await client.testEchoAuthorizationGet(extraHeaders = @[("Authorization", "Bearer XYZ")])
+      check getRes == "Bearer XYZ"
 
     await client.closeWait()
     await server.stop()
