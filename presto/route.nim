@@ -210,8 +210,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       for paramName, paramType in parameters.paramsIter():
         let index = patterns.find($paramName)
         if isPathArg(paramType):
-          if isSimpleType(paramType) and
-             (paramType.strVal == "HttpResponseRef"):
+          if paramType.isKnownType("HttpResponseRef"):
             if isNil(respRes):
               respRes = paramName
             else:
@@ -257,7 +256,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     error("Return value must not be empty and equal to [RestApiResponse]",
            parameters)
   else:
-    if returnType.strVal != "RestApiResponse":
+    if not returnType.isKnownType("RestApiResponse"):
       error("Return value must be equal to [RestApiResponse]", returnType)
 
   # "path" (required) arguments unmarshalling code.

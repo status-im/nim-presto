@@ -35,7 +35,7 @@ proc makeProcName*(m, s: string): string =
 
 proc getRestReturnType*(params: NimNode): NimNode =
   if not(isNil(params)) and (len(params) > 0) and not(isNil(params[0])) and
-     (params[0].kind == nnkIdent):
+     (params[0].kind in {nnkIdent, nnkSym}):
     params[0]
   else:
     nil
@@ -47,40 +47,53 @@ iterator paramsIter*(params: NimNode): tuple[name, ntype: NimNode] =
     for j in 0 ..< arg.len-2:
       yield (arg[j], argType)
 
-proc isSimpleType*(typeNode: NimNode): bool =
-  typeNode.kind == nnkIdent
+proc isKnownType*(typeNode: NimNode, typeNames: varargs[string]): bool =
+  typeNode.kind in {nnkIdent, nnkSym} and
+  $typeNode in typeNames
+
+proc isBracketExpr(n: NimNode, nodes: varargs[string]): bool =
+  let leadingIdx = if n.kind == nnkBracketExpr:
+    0
+  elif n.kind == nnkCall and
+       n[0].kind in {nnkOpenSymChoice, nnkClosedSymChoice} and
+       n[0].len > 0 and
+       $n[0][0] == "[]":
+    1
+  else:
+    return false
+
+  for idx, types in nodes:
+    let actualIdx = leadingIdx + idx
+    if actualIdx > n.len:
+      return false
+    if not isKnownType(n[actualIdx], types.split("|")):
+      return false
+
+  return true
 
 proc isOptionalArg*(typeNode: NimNode): bool =
-  (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-    (typeNode[0].strVal == "Option")
+  typeNode.isBracketExpr "Option"
 
 proc isBytesArg*(typeNode: NimNode): bool =
-  (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-    (typeNode[0].strVal == "seq") and (typeNode[1].kind == nnkIdent) and
-    ((typeNode[1].strVal == "byte") or (typeNode[1].strVal == "uint8"))
+  typeNode.isBracketExpr("seq", "byte|uint8")
 
 proc isSequenceArg*(typeNode: NimNode): bool =
-  (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-    (typeNode[0].strVal == "seq")
+  typeNode.isBracketExpr("seq")
 
 proc isContentBodyArg*(typeNode: NimNode): bool =
-  (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-    (typeNode[0].strVal == "Option") and (typeNode[1].kind == nnkIdent) and
-    (typeNode[1].strVal == "ContentBody")
+  typeNode.isBracketExpr("Option", "ContentBody")
 
 proc isResponseArg*(typeNode: NimNode): bool =
-  (typeNode.kind == nnkIdent) and (typeNode.strVal == "HttpResponseRef")
+  typeNode.isKnownType "HttpResponseRef"
 
 proc getSequenceType*(typeNode: NimNode): NimNode =
-  if (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-     (typeNode[0].strVal == "seq"):
+  if typeNode.isBracketExpr("seq"):
     typeNode[1]
   else:
     nil
 
 proc getOptionType*(typeNode: NimNode): NimNode =
-  if (typeNode.kind == nnkBracketExpr) and (typeNode[0].kind == nnkIdent) and
-     (typeNode[0].strVal == "Option"):
+  if typeNode.isBracketExpr("Option"):
     typeNode[1]
   else:
     nil

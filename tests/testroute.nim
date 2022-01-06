@@ -1,4 +1,4 @@
-import std/[unittest, strutils, parseutils]
+import std/[unittest, strutils, parseutils, typetraits]
 import helpers
 import chronos, chronos/apps
 import stew/byteutils
@@ -150,6 +150,25 @@ suite "REST API router & macro tests":
       bytesToString(r1.content.data) == "ok-1"
       r2.kind == RestApiResponseKind.Content
       bytesToString(r2.content.data) == "ok-2"
+
+  test "Routes installation from generic proc":
+    proc addGenericRoute(router: var RestRouter, T: type) =
+      const typeName = typetraits.name(T)
+      router.api(MethodGet, "/test/" & typeName) do () -> RestApiResponse:
+        return RestApiResponse.response(typeName, contentType = "text/plain")
+
+    var router = RestRouter.init(testValidate)
+    router.addGenericRoute(string)
+    router.addGenericRoute(int)
+
+    let r1 = router.sendMockRequest(MethodGet, "http://l.to/test/string")
+    let r2 = router.sendMockRequest(MethodGet, "http://l.to/test/int")
+    
+    check:
+      r1.kind == RestApiResponseKind.Content
+      r2.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "string"
+      bytesToString(r2.content.data) == "int"
 
   test "Custom types as parameters test":
     var router = RestRouter.init(testValidate)
