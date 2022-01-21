@@ -2,6 +2,10 @@ import std/[strutils, parseutils]
 import stew/[byteutils, base10]
 import ../presto/common
 
+const
+  testMediaType1* = MediaType.init("app/type1")
+  testMediaType2* = MediaType.init("app/type2")
+
 type
   CustomKind* {.pure.} = enum
     Level1, Level2, Level3
