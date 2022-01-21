@@ -1082,13 +1082,12 @@ suite "REST API client test suite":
           b.contentType & "," & bytesToString(b.data)
         else:
           "nobody"
-      let preferred = preferredContentType("app/type1", "app/type2")
+      let preferred = preferredContentType(testMediaType1, testMediaType2)
       return
         if preferred.isOk():
-          case preferred.get()
-          of "app/type1":
+          if preferred.get() == testMediaType1:
             RestApiResponse.response("type1[" & obody & "]")
-          of "app/type2":
+          elif preferred.get() == testMediaType2:
             RestApiResponse.response("type2[" & obody & "]")
           else:
             # This MUST not be happened.

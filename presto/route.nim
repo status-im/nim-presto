@@ -338,7 +338,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
                   `queryParams`: HttpTable, `bodyParam`: Option[ContentBody]
                  ): Future[RestApiResponse] {.raises: [Defect], async.} =
       template preferredContentType(
-                         t: varargs[string]): Result[string, cstring] {.used.} =
+                         t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
         `requestParam`.preferredContentType(t)
       `pathDecoder`
       `optDecoder`
