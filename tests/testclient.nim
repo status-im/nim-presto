@@ -1072,6 +1072,66 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "`accept` pragma test":
+    const
+      AcceptHeaderConst1 = "image/gif,audio/wave"
+      AcceptHeaderConst2 = ",video/webm,audio/ogg"
+
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test/pragma/accept") do () -> RestApiResponse:
+      let accept = request.headers.getString("accept")
+      return RestApiResponse.response("accept[" & accept & "]")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+
+    proc testAccept1(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet.}
+    proc testAccept2(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet,
+      accept: "application/octet,image/jpeg,*/*".}
+    proc testAccept3(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet,
+      accept: AcceptHeaderConst1.}
+    proc testAccept4(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet,
+      accept: AcceptHeaderConst1 & AcceptHeaderConst2.}
+    proc testAccept5(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet,
+      accept: AcceptHeaderConst1 & ",image/jpeg".}
+    proc testAccept6(): RestPlainResponse {.
+      rest, endpoint: "/test/pragma/accept", meth: MethodGet,
+      accept: "image/png" & ",image/jpeg".}
+
+    var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+
+    let res1 = await client.testAccept1()
+    let res2 = await client.testAccept2()
+    let res3 = await client.testAccept3()
+    let res4 = await client.testAccept4()
+    let res5 = await client.testAccept5()
+    let res6 = await client.testAccept6()
+
+    check:
+      res1.status == 200
+      res2.status == 200
+      res3.status == 200
+      res4.status == 200
+      res5.status == 200
+      res6.status == 200
+      res1.data.bytesToString() == "accept[application/json]"
+      res2.data.bytesToString() == "accept[application/octet,image/jpeg,*/*]"
+      res3.data.bytesToString() == "accept[image/gif,audio/wave]"
+      res4.data.bytesToString() ==
+        "accept[image/gif,audio/wave,video/webm,audio/ogg]"
+      res5.data.bytesToString() == "accept[image/gif,audio/wave,image/jpeg]"
+      res6.data.bytesToString() == "accept[image/png,image/jpeg]"
+
+    await client.closeWait()
+    await server.stop()
+    await server.closeWait()
+
   asyncTest "Accept test":
     var router = RestRouter.init(testValidate)
     router.api(MethodPost, "/test/accept") do (

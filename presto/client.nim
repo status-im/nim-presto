@@ -121,7 +121,7 @@ proc closeWait*(client: RestClientRef) {.async.} =
 proc createPostRequest*(client: RestClientRef, path: string, query: string,
                         contentType: string, acceptType: string,
                         extraHeaders: openArray[HttpHeaderTuple],
-                        meth: HttpMethod,
+                        httpMethod: HttpMethod,
                         contentLength: uint64): HttpClientRequestRef =
   var address = client.address
   address.path = path
@@ -134,12 +134,13 @@ proc createPostRequest*(client: RestClientRef, path: string, query: string,
   headers.add(("user-agent", client.agent))
   headers.add extraHeaders
 
-  HttpClientRequestRef.new(client.session, address, meth, headers = headers)
+  HttpClientRequestRef.new(client.session, address, httpMethod,
+                           headers = headers)
 
 proc createGetRequest*(client: RestClientRef, path: string, query: string,
                        contentType: string, acceptType: string,
                        extraHeaders: openArray[HttpHeaderTuple],
-                       meth: HttpMethod): HttpClientRequestRef =
+                       httpMethod: HttpMethod): HttpClientRequestRef =
   var address = client.address
   address.path = path
   address.query = query
@@ -149,15 +150,22 @@ proc createGetRequest*(client: RestClientRef, path: string, query: string,
   headers.add(("user-agent", client.agent))
   headers.add extraHeaders
 
-  HttpClientRequestRef.new(client.session, address, meth, headers = headers)
+  HttpClientRequestRef.new(client.session, address, httpMethod,
+                           headers = headers)
 
 proc getEndpointOrDefault(prc: NimNode,
                           default: string): string {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
-      if node[0].kind == nnkIdent and node[0].strVal() == "endpoint":
-        return node[1].strVal()
+      if (node[0].kind == nnkIdent) and (node[0].strVal() == "endpoint"):
+        if node[1].kind != nnkStrLit:
+          error("REST procedure {.endpoint.} pragma's value should be " &
+                "string literal only", node[1])
+        if len(node[1].strVal) == 0:
+          error("REST procedure should have non-empty {.endpoint.} pragma",
+                node[1])
+        return node[1].strVal
   return default
 
 proc getMethodOrDefault(prc: NimNode,
@@ -166,17 +174,24 @@ proc getMethodOrDefault(prc: NimNode,
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
       if node[0].kind == nnkIdent and node[0].strVal == "meth":
-        return node[1]
+        return copyNimTree(node[1])
   return default
 
 proc getAcceptOrDefault(prc: NimNode,
-                        default: string): string {.compileTime.} =
+                        default: string): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
-      if node[0].kind == nnkIdent and node[0].strVal == "accept":
-        return node[1].strVal()
-  return default
+      if (node[0].kind == nnkIdent) and (node[0].strVal == "accept"):
+        case node[1].kind
+        of nnkStrLit:
+          if len(node[1].strVal) > 0:
+            return copyNimTree(node[1])
+          error("REST procedure should have non-empty {.accept.} pragma",
+                node[1])
+        else:
+          return copyNimTree(node[1])
+  return newStrLitNode(default)
 
 proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
@@ -647,28 +662,14 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       else:
         (node, RestReturnKind.Value)
 
-  let endpoint =
-    block:
-      let res = prc.getEndpointOrDefault("")
-      if len(res) == 0:
-        error("REST procedure should have non-empty {.endpoint.} pragma",
-              prc.pragma())
-      res
-
-  let accept =
-    block:
-      let res = prc.getAcceptOrDefault(DefaultAcceptContentType)
-      if len(res) == 0:
-        error("REST procedure should have non-empty {.accept.} pragma",
-              prc.pragma())
-      res
-
-  let meth = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
-                                               ident("MethodGet")))
-  let spath = SegmentedPath.init(HttpMethod.MethodGet, endpoint, nil)
+  let endpointValue = prc.getEndpointOrDefault("")
+  let acceptValue = prc.getAcceptOrDefault(DefaultAcceptContentType)
+  let methodValue = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
+                                           ident("MethodGet")))
+  let spath = SegmentedPath.init(HttpMethod.MethodGet, endpointValue, nil)
   var patterns = spath.getPatterns()
 
-  let isPostMethod = meth.isPostMethod()
+  let isPostMethod = methodValue.isPostMethod()
 
   let (bodyArgument, optionalArguments, pathArguments) =
     block:
@@ -814,14 +815,14 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             parameters)
 
   if len(pathArguments) > 0:
-    let pathLiteral = newStrLitNode(endpoint)
+    let pathLiteral = newStrLitNode(endpointValue)
     let arrayItems = newArrayNode(
       pathArguments.mapIt(newPar(it.literal, it.ename))
     )
     statements.add quote do:
       let `requestPath` = createPath(`pathLiteral`, `arrayItems`)
   else:
-    let pathLiteral = newStrLitNode(endpoint)
+    let pathLiteral = newStrLitNode(endpointValue)
     statements.add quote do:
       let `requestPath` = `pathLiteral`
 
@@ -862,7 +863,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           let `requestIdent` = createPostRequest(
             `clientIdent`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
-            `extraHeadersIdent`, `meth`,
+            `extraHeadersIdent`, `methodValue`,
             uint64(len(`bodyIdent`))
           )
           await requestWithBody(`requestIdent`,
@@ -876,7 +877,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           let `requestIdent` = createGetRequest(
             `clientIdent`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
-            `extraHeadersIdent`, `meth`
+            `extraHeadersIdent`, `methodValue`
           )
           await requestWithoutBody(`requestIdent`, `requestFlagsIdent`)
 
@@ -922,7 +923,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
                                     acceptTypeIdent, extraHeadersIdent,
-                                    newStrLitNode(accept), statements)
+                                    acceptValue, statements)
   res
 
 macro rest*(prc: untyped): untyped =
