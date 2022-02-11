@@ -6,8 +6,10 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos, chronos/apps/http/[httpcommon, httptable]
+
 import std/[macros, options]
+import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
+import httputils
 import stew/bitops2
 import btrees
 import common, segpath, macrocommon
@@ -46,13 +48,22 @@ type
   RestRouter* = object
     patternCallback*: PatternCallback
     routes*: BTree[SegmentedPath, RestRouteItem]
+    allowedOrigin*: Option[string]
 
 proc init*(t: typedesc[RestRouter],
-           patternCallback: PatternCallback): RestRouter {.raises: [Defect].} =
+           patternCallback: PatternCallback,
+           allowedOrigin = none(string)): RestRouter {.raises: [Defect].} =
   doAssert(not(isNil(patternCallback)),
            "Pattern validation callback must not be nil")
   RestRouter(patternCallback: patternCallback,
-             routes: initBTree[SegmentedPath, RestRouteItem]())
+             routes: initBTree[SegmentedPath, RestRouteItem](),
+             allowedOrigin: allowedOrigin)
+
+proc optionsRequestHandler(request: HttpRequestRef,
+                           pathParams: HttpTable,
+                           queryParams: HttpTable,
+                           body: Option[ContentBody]): Future[RestApiResponse] {.async.} =
+  return RestApiResponse.response("", Http200)
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
                flags: set[RestRouterFlag], handler: RestApiCallback) {.
@@ -65,6 +76,25 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
     let item = RestRouteItem(kind: RestRouteKind.Handler,
                              path: spath, flags: flags, callback: handler)
     rr.routes.add(spath, item)
+
+    if rr.allowedOrigin.isSome:
+      let
+        optionsPath = SegmentedPath.init(
+          MethodOptions, path, rr.patternCallback)
+        optionsRoute = rr.routes.getOrDefault(
+          optionsPath, RestRouteItem(kind: RestRouteKind.None))
+      case route.kind
+      of RestRouteKind.None:
+        let optionsHandler = RestRouteItem(kind: RestRouteKind.Handler,
+                                           path: optionsPath,
+                                           flags: {RestRouterFlag.Raw},
+                                           callback: optionsRequestHandler)
+        rr.routes.add(optionsPath, optionsHandler)
+      else:
+        # This may happen if we use the same URL path in separate GET and
+        # POST handlers. Reusing the previously installed OPTIONS handler
+        # is perfectly fine.
+        discard
   else:
     raiseAssert("The route is already in the routing table")
 

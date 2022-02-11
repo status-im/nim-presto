@@ -6,7 +6,7 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos/apps
+import chronos/apps, chronos/apps/http/httpclient
 import stew/[results, byteutils]
 export results, apps
 
@@ -72,11 +72,11 @@ proc response*(t: typedesc[RestApiResponse], data: ByteChar,
     else:
       block:
         var default: seq[byte]
-        if len(data) > 0:
-          ContentBody(contentType: contentType, data: toBytes(data))
-        else:
-          ContentBody(contentType: contentType, data: default)
-  RestApiResponse(kind: RestApiResponseKind.Content, status: status,
+        ContentBody(contentType: contentType,
+                    data: if len(data) > 0: toBytes(data) else: default)
+
+  RestApiResponse(kind: RestApiResponseKind.Content,
+                  status: status,
                   content: content)
 
 proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,

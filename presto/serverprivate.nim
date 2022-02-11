@@ -28,6 +28,16 @@ proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
     let cbody = ContentBody(contentType: cres.get(), data: data)
     return some[ContentBody](cbody)
 
+proc originsMatch(requestOrigin, allowedOrigin: string): bool =
+  if allowedOrigin.startsWith("http://") or allowedOrigin.startsWith("https://"):
+    requestOrigin == allowedOrigin
+  elif requestOrigin.startsWith("http://"):
+    requestOrigin.toOpenArray(7, requestOrigin.len - 1) == allowedOrigin
+  elif requestOrigin.startsWith("https://"):
+    requestOrigin.toOpenArray(8, requestOrigin.len - 1) == allowedOrigin
+  else:
+    false
+
 proc processRestRequest*[T](server: T,
                             rf: RequestFence): Future[HttpResponseRef] {.
      gcsafe, async.} =
@@ -98,14 +108,36 @@ proc processRestRequest*[T](server: T,
                       uri = $request.uri
               return await request.respond(Http410)
             of RestApiResponseKind.Content:
-              let headers = HttpTable.init([("Content-Type",
+              var headers = HttpTable.init([("Content-Type",
                                             restRes.content.contentType)])
+              if server.router.allowedOrigin.isSome:
+                let origin = request.headers.getList("Origin")
+                let everyOriginAllowed = server.router.allowedOrigin.get == "*"
+                if origin.len == 1:
+                  if everyOriginAllowed:
+                    headers.add("Access-Control-Allow-Origin", "*")
+                  elif originsMatch(origin[0], server.router.allowedOrigin.get):
+                    # The Vary: Origin header to must be set to prevent
+                    # potential cache poisoning attacks:
+                    # https://textslashplain.com/2018/08/02/cors-and-vary/
+                    headers.add("Vary", "Origin")
+                    headers.add("Access-Control-Allow-Origin", origin[0])
+                  else:
+                    return await request.respond(Http403, "Origin not allowed")
+                elif origin.len > 1:
+                  return await request.respond(Http400,
+                    "Only a single Origin header must be specified")
+                elif not everyOriginAllowed:
+                  return await request.respond(Http403,
+                    "Service can be used only from CORS-enabled clients")
+
               debug "Received response from handler",
                     status = restRes.status.toInt(),
                     meth = $request.meth, peer = $request.remoteAddress(),
                     uri = $request.uri,
                     content_type = restRes.content.contentType,
                     content_size = len(restRes.content.data)
+
               return await request.respond(restRes.status,
                                            restRes.content.data, headers)
             of RestApiResponseKind.Error:
