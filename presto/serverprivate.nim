@@ -122,14 +122,9 @@ proc processRestRequest*[T](server: T,
                     # https://textslashplain.com/2018/08/02/cors-and-vary/
                     headers.add("Vary", "Origin")
                     headers.add("Access-Control-Allow-Origin", origin[0])
-                  else:
-                    return await request.respond(Http403, "Origin not allowed")
                 elif origin.len > 1:
                   return await request.respond(Http400,
                     "Only a single Origin header must be specified")
-                elif not everyOriginAllowed:
-                  return await request.respond(Http403,
-                    "Service can be used only from CORS-enabled clients")
 
               debug "Received response from handler",
                     status = restRes.status.toInt(),
