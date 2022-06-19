@@ -1,4 +1,4 @@
-import std/[unittest, strutils]
+import std/[unittest, strutils, algorithm]
 import helpers
 import chronos, chronos/apps
 import stew/byteutils
@@ -10,6 +10,38 @@ type
   ClientResponse = object
     status*: int
     data*: string
+    headers*: HttpTable
+
+proc cmpNoHeaders(a, b: ClientResponse): bool =
+  (a.status == b.status) and (a.data == b.data)
+
+proc cmpWithHeaders(a, b: ClientResponse): bool =
+  if (a.status != b.status) or (a.data != b.data):
+    return false
+  for header in b.headers.items():
+    if header.key notin a.headers:
+      return false
+    let checkItems = a.headers.getList(header.key).sorted()
+    let expectItems = header.value.sorted()
+    if checkItems != expectItems:
+      return false
+  true
+
+proc init(t: typedesc[ClientResponse], status: int): ClientResponse =
+  ClientResponse(status: status)
+
+proc init(t: typedesc[ClientResponse], status: int,
+          data: string): ClientResponse =
+  ClientResponse(status: status, data: data)
+
+proc init(t: typedesc[ClientResponse], status: int, data: string,
+          headers: HttpTable): ClientResponse =
+  ClientResponse(status: status, data: data, headers: headers)
+
+proc init(t: typedesc[ClientResponse], status: int, data: string,
+          headers: openArray[tuple[key, value: string]]): ClientResponse =
+  let table = HttpTable.init(headers)
+  ClientResponse(status: status, data: data, headers: table)
 
 proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
                 body: string, ctype = "",
@@ -34,15 +66,23 @@ proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
   headersBuf.setLen(rlen)
   let resp = parseResponse(headersBuf, true)
   doAssert(resp.success())
+
+  let headers =
+    block:
+      var res = HttpTable.init()
+      for key, value in resp.headers(headersBuf):
+        res.add(key, value)
+      res
+
   let length = resp.contentLength()
   doAssert(length >= 0)
   let cresp =
     if length > 0:
       var dataBuf = newString(length)
       await transp.readExactly(addr dataBuf[0], len(dataBuf))
-      ClientResponse(status: resp.code, data: dataBuf)
+      ClientResponse.init(resp.code, dataBuf, headers)
     else:
-      ClientResponse(status: resp.code, data: "")
+      ClientResponse.init(resp.code, "", headers)
   await transp.closeWait()
   return cresp
 
@@ -94,12 +134,12 @@ suite "REST API server test suite":
                                   "//////////////////////////////////////////" &
                                   "//////////////////////////test", "")
       check:
-        res1 == ClientResponse(status: 410)
-        res2 == ClientResponse(status: 200, data: "ok-1")
-        res3.status == 505
-        res4 == ClientResponse(status: 503)
-        res5 == ClientResponse(status: 404)
-        res6 == ClientResponse(status: 400)
+        cmpNoHeaders(res1, ClientResponse.init(410))
+        cmpNoHeaders(res2, ClientResponse.init(200, "ok-1"))
+        cmpNoHeaders(res3, ClientResponse.init(505, "Some error"))
+        cmpNoHeaders(res4, ClientResponse.init(503))
+        cmpNoHeaders(res5, ClientResponse.init(404))
+        cmpNoHeaders(res6, ClientResponse.init(400))
     finally:
       await server.closeWait()
 
@@ -132,35 +172,35 @@ suite "REST API server test suite":
                                       toHex(smp3.get()))
 
     const TestVectors = [
-      ("/test/1234", ClientResponse(status: 200, data: "1234")),
-      ("/test/12345678", ClientResponse(status: 200, data: "12345678")),
-      ("/test/00000001", ClientResponse(status: 200, data: "1")),
-      ("/test/0000000", ClientResponse(status: 200, data: "0")),
-      ("/test/99999999999999999999999", ClientResponse(status: 411)),
-      ("/test/nondec", ClientResponse(status: 404)),
+      ("/test/1234", ClientResponse.init(200, "1234")),
+      ("/test/12345678", ClientResponse.init(200, "12345678")),
+      ("/test/00000001", ClientResponse.init(200, "1")),
+      ("/test/0000000", ClientResponse.init(200, "0")),
+      ("/test/99999999999999999999999", ClientResponse.init(411)),
+      ("/test/nondec", ClientResponse.init(404)),
 
-      ("/test/1234/text1", ClientResponse(status: 200, data: "1234:text1")),
+      ("/test/1234/text1", ClientResponse.init(200, "1234:text1")),
       ("/test/12345678/texttext2",
-       ClientResponse(status: 200, data: "12345678:texttext2")),
+       ClientResponse.init(200, "12345678:texttext2")),
       ("/test/00000001/texttexttext3",
-       ClientResponse(status: 200, data: "1:texttexttext3")),
+       ClientResponse.init(200, "1:texttexttext3")),
       ("/test/0000000/texttexttexttext4",
-       ClientResponse(status: 200, data: "0:texttexttexttext4")),
-      ("/test/nondec/texttexttexttexttext5", ClientResponse(status: 404)),
+       ClientResponse.init(200, "0:texttexttexttext4")),
+      ("/test/nondec/texttexttexttexttext5", ClientResponse.init(404)),
       ("/test/99999999999999999999999/texttexttexttexttext5",
-       ClientResponse(status: 411)),
+       ClientResponse.init(411)),
 
       ("/test/1234/text1/0xCAFE",
-       ClientResponse(status: 200, data: "1234:text1:cafe")),
+       ClientResponse.init(200, "1234:text1:cafe")),
       ("/test/12345678/text2text2/0xdeadbeaf",
-       ClientResponse(status: 200, data: "12345678:text2text2:deadbeaf")),
+       ClientResponse.init(200, "12345678:text2text2:deadbeaf")),
       ("/test/00000001/text3text3text3/0xabcdef012345",
-       ClientResponse(status: 200, data: "1:text3text3text3:abcdef012345")),
+       ClientResponse.init(200, "1:text3text3text3:abcdef012345")),
       ("/test/00000000/text4text4text4text4/0xaa",
-       ClientResponse(status: 200, data: "0:text4text4text4text4:aa")),
-      ("/test/nondec/text5/0xbb", ClientResponse(status: 404)),
-      ("/test/99999999999999999999999/text6/0xcc", ClientResponse(status: 411)),
-      ("/test/1234/text7/0xxx", ClientResponse(status: 413))
+       ClientResponse.init(200, "0:text4text4text4text4:aa")),
+      ("/test/nondec/text5/0xbb", ClientResponse.init(404)),
+      ("/test/99999999999999999999999/text6/0xcc", ClientResponse.init(411)),
+      ("/test/1234/text7/0xxx", ClientResponse.init(413))
     ]
 
     var sres = RestServerRef.new(router, serverAddress)
@@ -243,25 +283,25 @@ suite "REST API server test suite":
     const TestVectors = [
       ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE",
-        ClientResponse(status: 200, data: "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe")),
+        ClientResponse.init(200, "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe")),
       # Optional argument will not pass decoding procedure `opt1=a`.
       ("/test/1/2/0xaa?opt1=a&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE",
-        ClientResponse(status: 414)),
+        ClientResponse.init(414)),
       # Sequence argument will not pass decoding procedure `opt4=a`.
       ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=a&opt5=t&" &
         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE",
-        ClientResponse(status: 417)),
+        ClientResponse.init(417)),
       # Optional argument will not pass decoding procedure `opt3=0xxx`.
       ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xxx&opt4=2&opt4=3&opt4=4&opt5=t&" &
         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE",
-        ClientResponse(status: 416)),
+        ClientResponse.init(416)),
       # Sequence argument will not pass decoding procedure `opt6=0xxx`.
       ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=5&opt5=t&" &
         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xxx",
-        ClientResponse(status: 421)),
+        ClientResponse.init(421)),
       # All optional arguments are missing
-      ("/test/1/2/0xaa", ClientResponse(status: 200, data: "1:2:aa::::::"))
+      ("/test/1/2/0xaa", ClientResponse.init(200, "1:2:aa::::::"))
     ]
 
     var sres = RestServerRef.new(router, serverAddress)
@@ -354,23 +394,21 @@ suite "REST API server test suite":
     const PostVectors = [
       (
         ("/test/1/2/0xaa", "text/text", "textbody"),
-        ClientResponse(status: 200,
-                       data: "1:2:aa:::::::text/text,textbody")
+        ClientResponse.init(200, "1:2:aa:::::::text/text,textbody")
       ),
       (
         ("/test/1/2/0xaa", "", ""),
-        ClientResponse(status: 400)
+        ClientResponse.init(400)
       ),
       (
         ("/test/1/2/0xaa", "text/text", ""),
-        ClientResponse(status: 200,
-                       data: "1:2:aa:::::::text/text,")
+        ClientResponse.init(200, "1:2:aa:::::::text/text,")
       ),
       (
         ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
          "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE", "text/text", "textbody"),
-        ClientResponse(status: 200, data:
-                       "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/text,textbody")
+        ClientResponse.init(200,
+                         "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/text,textbody")
       )
     ]
 
@@ -473,22 +511,22 @@ suite "REST API server test suite":
         # Empty result with response sent via `resp`.
         ("/test/1?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
          "text/text", "somebody"),
-         ClientResponse(status: 200,
-                        data: "1:2345:3456,4567,5678,6789:text/text,somebody")
+         ClientResponse.init(200,
+                             "1:2345:3456,4567,5678,6789:text/text,somebody")
       ),
       (
         # Result with response sent via `resp`.
         ("/test/2?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
          "text/text", "somebody"),
-        ClientResponse(status: 200,
-                       data: "2:2345:3456,4567,5678,6789:text/text,somebody")
+        ClientResponse.init(200,
+                            "2:2345:3456,4567,5678,6789:text/text,somebody")
       ),
       (
         # Error with response sent via `resp`.
         ("/test/3?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
          "text/text", "somebody"),
-         ClientResponse(status: 200,
-                        data: "3:2345:3456,4567,5678,6789:text/text,somebody")
+         ClientResponse.init(200,
+                             "3:2345:3456,4567,5678,6789:text/text,somebody")
       )
     ]
 
@@ -496,17 +534,17 @@ suite "REST API server test suite":
       (
         # Empty result with response sent via `resp`.
         "/test/1?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-        ClientResponse(status: 200, data: "1:2345:3456,4567,5678,6789")
+        ClientResponse.init(200, "1:2345:3456,4567,5678,6789")
       ),
       (
         # Result with response sent via `resp`.
         "/test/2?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-        ClientResponse(status: 200, data: "2:2345:3456,4567,5678,6789")
+        ClientResponse.init(200, "2:2345:3456,4567,5678,6789")
       ),
       (
         # Error with response sent via `resp`.
         "/test/3?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-        ClientResponse(status: 200, data: "3:2345:3456,4567,5678,6789")
+        ClientResponse.init(200, "3:2345:3456,4567,5678,6789")
       )
     ]
 
@@ -531,42 +569,182 @@ suite "REST API server test suite":
     finally:
       await server.closeWait()
 
+  asyncTest "Responses with headers test":
+    var router = RestRouter.init(testValidate)
+
+    router.api(MethodGet, "/test/get/success") do (
+      param: Option[string]) -> RestApiResponse:
+      let test = param.get().get()
+      case test
+      of "test1":
+        let headers = [
+          ("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "1")
+        ]
+        return RestApiResponse.response("TEST1:OK", Http200, headers = headers)
+      of "test2":
+        let headers = HttpTable.init([
+          ("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "2")
+        ])
+        return RestApiResponse.response("TEST2:OK", Http200, headers = headers)
+      of "test3":
+        let headers = HttpTable.init([
+          ("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "3"), ("content-type", "application/success")
+        ])
+        return RestApiResponse.response("TEST3:OK", Http200,
+                                        contentType = "text/success",
+                                        headers = headers)
+      else:
+        return RestApiResponse.error(Http400)
+
+    router.api(MethodGet, "/test/get/error") do (
+      param: Option[string]) -> RestApiResponse:
+      let testName = param.get().get()
+      case testName
+      of "test1":
+        let headers = [
+          ("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "1")
+        ]
+        return RestApiResponse.error(Http404, "ERROR1:OK", headers = headers)
+      of "test2":
+        let headers = HttpTable.init([
+          ("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "2")
+        ])
+        return RestApiResponse.error(Http404, "ERROR2:OK", headers = headers)
+      of "test3":
+        let headers = HttpTable.init([
+          ("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "3"), ("content-type", "application/error")
+        ])
+        return RestApiResponse.error(Http404, "ERROR3:OK",
+                                     contentType = "text/error",
+                                     headers = headers)
+      else:
+        return RestApiResponse.error(Http400)
+
+    router.api(MethodGet, "/test/get/redirect") do (
+      param: Option[string]) -> RestApiResponse:
+      let testName = param.get().get()
+      case testName
+      of "test1":
+        let headers = [
+          ("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "1")
+        ]
+        return RestApiResponse.redirect(Http307, "/test/get/redirect1",
+                                        preserveQuery = true, headers = headers)
+      of "test2":
+        let headers = HttpTable.init([
+          ("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "2")
+        ])
+        return RestApiResponse.redirect(Http307, "/test/get/redirect2",
+                                        preserveQuery = false,
+                                        headers = headers)
+      of "test3":
+        let headers = HttpTable.init([
+          ("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "3"), ("location", "/test/get/wrong_redirect")
+        ])
+        return RestApiResponse.redirect(Http307, "/test/get/redirect3",
+                                        preserveQuery = true,
+                                        headers = headers)
+      else:
+        return RestApiResponse.error(Http400)
+
+    const HttpHeadersVectors = [
+      ("/test/get/success?param=test1",
+       ClientResponse.init(200, "TEST1:OK",
+         [("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "1")])),
+      ("/test/get/success?param=test2",
+       ClientResponse.init(200, "TEST2:OK",
+         [("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "2")])),
+      ("/test/get/success?param=test3",
+       ClientResponse.init(200, "TEST3:OK",
+         [("test-header", "SUCCESS"), ("test-header", "TEST"),
+          ("test-header", "3"), ("content-type", "text/success")])),
+
+      ("/test/get/error?param=test1",
+       ClientResponse.init(404, "ERROR1:OK",
+         [("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "1")])),
+      ("/test/get/error?param=test2",
+       ClientResponse.init(404, "ERROR2:OK",
+         [("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "2")])),
+      ("/test/get/error?param=test3",
+       ClientResponse.init(404, "ERROR3:OK",
+         [("test-header", "ERROR"), ("test-header", "TEST"),
+          ("test-header", "3"), ("content-type", "text/error")])),
+
+      ("/test/get/redirect?param=test1",
+       ClientResponse.init(307, "",
+         [("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "1"),
+          ("location", "/test/get/redirect1?param=test1")])),
+      ("/test/get/redirect?param=test2",
+       ClientResponse.init(307, "",
+         [("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "2"),
+          ("location", "/test/get/redirect2")])),
+      ("/test/get/redirect?param=test3",
+       ClientResponse.init(307, "",
+         [("test-header", "REDIRECT"), ("test-header", "TEST"),
+          ("test-header", "3"),
+          ("location", "/test/get/redirect3?param=test3")])),
+    ]
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      for item in HttpHeadersVectors:
+        let res = await httpClient(serverAddress, MethodGet, item[0], "")
+        check cmpWithHeaders(res, item[1])
+    finally:
+      await server.closeWait()
+
   asyncTest "preferredContentType() test":
     const PostVectors = [
       (
         ("/test/post", "somebody0908", "text/html",
         "app/type1;q=0.9,app/type2;q=0.8"),
-        ClientResponse(status: 200, data: "type1[text/html,somebody0908]")
+        ClientResponse.init(200, "type1[text/html,somebody0908]")
       ),
       (
         ("/test/post", "somebody0908", "text/html",
         "app/type2;q=0.8,app/type1;q=0.9"),
-        ClientResponse(status: 200, data: "type1[text/html,somebody0908]")
+        ClientResponse.init(200, "type1[text/html,somebody0908]")
       ),
       (
         ("/test/post", "somebody09", "text/html",
          "app/type2,app/type1;q=0.9"),
-        ClientResponse(status: 200, data: "type2[text/html,somebody09]")
+        ClientResponse.init(200, "type2[text/html,somebody09]")
       ),
       (
         ("/test/post", "somebody09", "text/html", "app/type1;q=0.9,app/type2"),
-        ClientResponse(status: 200, data: "type2[text/html,somebody09]")
+        ClientResponse.init(200, "type2[text/html,somebody09]")
       ),
       (
         ("/test/post", "somebody", "text/html", "*/*"),
-        ClientResponse(status: 200, data: "type1[text/html,somebody]")
+        ClientResponse.init(200, "type1[text/html,somebody]")
       ),
       (
         ("/test/post", "somebody", "text/html", ""),
-        ClientResponse(status: 200, data: "type1[text/html,somebody]")
+        ClientResponse.init(200, "type1[text/html,somebody]")
       ),
       (
         ("/test/post", "somebody", "text/html", "app/type2"),
-        ClientResponse(status: 200, data: "type2[text/html,somebody]")
+        ClientResponse.init(200, "type2[text/html,somebody]")
       ),
       (
         ("/test/post", "somebody", "text/html", "app/type3"),
-        ClientResponse(status: 406, data: "")
+        ClientResponse.init(406, "")
       )
     ]
     var router = RestRouter.init(testValidate)
