@@ -72,11 +72,11 @@ proc decodeString*(t: typedesc[CustomType1],
   else:
     err("Unable to decode value")
 
-proc decodeBytes*(t: typedesc[CustomType1], value: openarray[byte],
+proc decodeBytes*(t: typedesc[CustomType1], value: openArray[byte],
                   contentType: string): RestResult[CustomType1] =
   discard
 
-proc decodeBytes*(t: typedesc[string], value: openarray[byte],
+proc decodeBytes*(t: typedesc[string], value: openArray[byte],
                   contentType: string): RestResult[string] =
   var res: string
   if len(value) > 0:
@@ -84,7 +84,7 @@ proc decodeBytes*(t: typedesc[string], value: openarray[byte],
     copyMem(addr res[0], unsafeAddr value[0], len(value))
   ok(res)
 
-proc decodeBytes*(t: typedesc[int], value: openarray[byte],
+proc decodeBytes*(t: typedesc[int], value: openArray[byte],
                   contentType: string): RestResult[int] =
   if len(value) == 0:
     err("Could not find any integer")
@@ -125,7 +125,7 @@ proc encodeString*(value: int): RestResult[string] =
 proc encodeString*(value: string): RestResult[string] =
   ok(value)
 
-proc encodeString*(value: openarray[byte]): RestResult[string] =
+proc encodeString*(value: openArray[byte]): RestResult[string] =
   ok(toHex(value))
 
 proc decodeString*(t: typedesc[int], value: string): RestResult[int] =

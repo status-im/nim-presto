@@ -266,7 +266,7 @@ proc raiseRestDecodingBytesError*(message: cstring) {.noreturn, noinline.} =
   msg.add("]")
   raise (ref RestDecodingError)(msg: msg)
 
-proc newArrayNode(nodes: openarray[NimNode]): NimNode =
+proc newArrayNode(nodes: openArray[NimNode]): NimNode =
   newTree(nnkBracket, @nodes)
 
 proc isPostMethod(node: NimNode): bool {.compileTime.} =
