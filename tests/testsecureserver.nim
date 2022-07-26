@@ -83,7 +83,7 @@ proc httpsClient(server: TransportAddress, meth: HttpMethod, url: string,
 
   var
     transp: StreamTransport
-    tlsstream: TlsAsyncStream
+    tlsstream: TLSAsyncStream
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 

@@ -223,7 +223,7 @@ proc init*(st: typedesc[SegmentedPath], request: HttpMethod,
       $request & "/" & upath
   SegmentedPath.init(path, patternCb)
 
-proc createPath*(upath: string, values: openarray[KeyValueTuple]): string =
+proc createPath*(upath: string, values: openArray[KeyValueTuple]): string =
   var data: seq[string]
   var counter = 0
   var valuesCount = 0

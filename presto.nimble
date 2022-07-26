@@ -13,7 +13,14 @@ requires "nim >= 1.2.0",
          "stew"
 
 proc runTest(filename: string) =
-  var excstr: string = "nim c -r --hints:off --skipParentCfg " & getEnv("NIMFLAGS") & " "
+  let styleCheckStyle =
+    if (NimMajor, NimMinor) < (1, 6):
+      "hint"
+    else:
+      "error"
+  var excstr: string =
+    "nim c -r --hints:off --styleCheck:usages --styleCheck:" & styleCheckStyle &
+    " --skipParentCfg " & getEnv("NIMFLAGS") & " "
   excstr.add("tests/" & filename)
   exec excstr
   rmFile "tests/" & filename.toExe
