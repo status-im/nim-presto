@@ -7,13 +7,17 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import chronos/apps, chronos/apps/http/httpclient
-import stew/[results, byteutils]
-export results, apps
+import stew/[results, byteutils], httputils
+export results, apps, httputils
 
 {.push raises: [Defect].}
 
 type
   ContentBody* = object
+    contentType*: ContentTypeData
+    data*: seq[byte]
+
+  ResponseContentBody* = object
     contentType*: string
     data*: seq[byte]
 
@@ -34,7 +38,7 @@ type
     of RestApiResponseKind.Empty:
       discard
     of RestApiResponseKind.Content:
-      content*: ContentBody
+      content*: ResponseContentBody
     of RestApiResponseKind.Error:
       errobj*: RestApiError
     of RestApiResponseKind.Redirect:
@@ -57,6 +61,14 @@ type
     contentType*: string
     message*: string
   RestKeyValueTuple* = tuple[key: string, value: string]
+
+proc init*(t: typedesc[ContentBody],
+           contentType: MediaType, data: openArray[byte]): ContentBody =
+  ContentBody(
+    contentType: ContentTypeData(status: HttpStatus.Success,
+                                 mediaType: contentType),
+    data: @data
+  )
 
 proc error*(t: typedesc[RestApiResponse],
             status: HttpCode = Http200, msg: string = "",
@@ -95,12 +107,12 @@ proc response*(t: typedesc[RestApiResponse], data: ByteChar,
   ## ``Content-Type`` header's value in ``headers`` table.
   let content =
     when data is seq[byte]:
-      ContentBody(contentType: contentType, data: data)
+      ResponseContentBody(contentType: contentType, data: data)
     else:
       block:
         var default: seq[byte]
-        ContentBody(contentType: contentType,
-                    data: if len(data) > 0: toBytes(data) else: default)
+        ResponseContentBody(contentType: contentType,
+                            data: if len(data) > 0: toBytes(data) else: default)
   RestApiResponse(kind: RestApiResponseKind.Content, status: status,
                   headers: headers, content: content)
 
@@ -140,6 +152,5 @@ proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
   redirect(t, status, location, preserveQuery, HttpTable.init(headers))
 
 proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
-               location: string,
-               preserveQuery = false): RestApiResponse =
+               location: string, preserveQuery = false): RestApiResponse =
   redirect(t, status, location, preserveQuery, HttpTable.init())

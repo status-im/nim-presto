@@ -12,20 +12,22 @@ import chronicles
 import stew/results
 import route, common, segpath, servercommon
 
-proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.async.} =
+proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
+     async.} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
   else:
     var default: seq[byte]
-    let cres = getContentType(r.headers.getList("content-type"))
-    if not(cres.isOk()):
-      raise newException(RestBadRequestError, "Incorrect Content-Type header")
+    if r.contentTypeData.isNone():
+      raise newException(RestBadRequestError,
+                         "Incorrect/missing Content-Type header")
     let data =
       if r.hasBody():
         await r.getBody()
       else:
         default
-    let cbody = ContentBody(contentType: cres.get(), data: data)
+    let cbody = ContentBody(contentType: r.contentTypeData.get(),
+                                   data: data)
     return some[ContentBody](cbody)
 
 proc originsMatch(requestOrigin, allowedOrigin: string): bool =

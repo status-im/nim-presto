@@ -31,8 +31,8 @@ proc sendMockRequest(router: RestRouter, meth: HttpMethod,
 
 proc sendMockRequest(router: RestRouter, meth: HttpMethod,
                      url: string, data: string): RestApiResponse =
-  let contentBody = ContentBody(contentType: "text/text",
-                                data: stringToBytes(data))
+  let contentBody = ContentBody.init(
+    MediaType.init("text/text"), stringToBytes(data))
   sendMockRequest(router, meth, url, some[ContentBody](contentBody))
 
 suite "REST API router & macro tests":
@@ -189,7 +189,8 @@ suite "REST API router & macro tests":
                "/test/custom_args/2/{pat1}/{pat2}/{pat3}") do (
       pat1: CustomType1, pat2: CustomType1, pat3: CustomType1,
       opt1: Option[CustomType1], opt2: Option[CustomType1],
-      opt3: Option[CustomType1], body: Option[ContentBody]) -> RestApiResponse:
+      opt3: Option[CustomType1],
+      body: Option[ContentBody]) -> RestApiResponse:
         let p1 = pat1.get()
         let p2 = pat2.get()
         let p3 = pat3.get()
@@ -374,9 +375,10 @@ suite "REST API router & macro tests":
 
   test "Unique routes test":
     var router = RestRouter.init(testValidate)
-    proc apiCallback(request: HttpRequestRef, pathParams: HttpTable,
-                     queryParams: HttpTable,
-                     body: Option[ContentBody]): Future[RestApiResponse] =
+    proc apiCallback(
+      request: HttpRequestRef, pathParams: HttpTable,
+      queryParams: HttpTable,
+      body: Option[ContentBody]): Future[RestApiResponse] =
       discard
 
     # Use HTTP method GET

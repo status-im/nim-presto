@@ -24,7 +24,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response(obody)
@@ -52,7 +52,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response(obody)
@@ -135,7 +135,8 @@ suite "REST API client test suite":
         extraHeaders = @[("Authorization", "Bearer XXX")])
       check postRes == "Bearer XXX"
 
-      let getRes = await client.testEchoAuthorizationGet(extraHeaders = @[("Authorization", "Bearer XYZ")])
+      let getRes = await client.testEchoAuthorizationGet(
+        extraHeaders = @[("Authorization", "Bearer XYZ")])
       check getRes == "Bearer XYZ"
 
     await client.closeWait()
@@ -160,7 +161,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response($smp1.get() & ":" & smp2.get() & ":" &
@@ -189,7 +190,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response($smp1.get() & ":" & smp2.get() & ":" &
@@ -222,7 +223,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-redirect-" & $smp1.get() & ":" &
@@ -323,7 +324,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-3:" &
@@ -346,7 +347,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-4:" &
@@ -385,12 +386,14 @@ suite "REST API client test suite":
       return RestApiResponse.response("ok-6:[" & o1 & "]")
 
     router.api(MethodPost, "/test/query/7") do (
-      q1: Option[int], contentBody: Option[ContentBody]) -> RestApiResponse:
+      q1: Option[int],
+      contentBody: Option[ContentBody]) -> RestApiResponse:
         return RestApiResponse.redirect(location = "/test/query/redirect/7",
                                         preserveQuery = true)
 
     router.api(MethodPost, "/test/query/redirect/7",) do (
-      q1: Option[int], contentBody: Option[ContentBody]) -> RestApiResponse:
+      q1: Option[int],
+      contentBody: Option[ContentBody]) -> RestApiResponse:
       let o1 =
         if q1.isSome():
           let res = q1.get()
@@ -402,13 +405,14 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-7:[" & o1 & "]:" & obody)
 
     router.api(MethodPost, "/test/query/8") do (
-      q1: seq[int], contentBody: Option[ContentBody]) -> RestApiResponse:
+      q1: seq[int],
+      contentBody: Option[ContentBody]) -> RestApiResponse:
         return RestApiResponse.redirect(location = "/test/query/redirect/8",
                                         preserveQuery = true)
 
@@ -422,7 +426,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-8:[" & o1 & "]:" & obody)
@@ -560,7 +564,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-2:" &
@@ -628,7 +632,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response("ok-3:" &
@@ -675,7 +679,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
       return RestApiResponse.response(
@@ -1139,7 +1143,7 @@ suite "REST API client test suite":
       let obody =
         if contentBody.isSome():
           let b = contentBody.get()
-          b.contentType & "," & bytesToString(b.data)
+          $b.contentType & "," & bytesToString(b.data)
         else:
           "nobody"
       let preferred = preferredContentType(testMediaType1, testMediaType2)
