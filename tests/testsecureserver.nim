@@ -416,7 +416,7 @@ suite "Secure REST API server test suite":
       let obody =
         if contentBody.isSome():
           let body = contentBody.get()
-          body.contentType & "," & bytesToString(body.data)
+          $body.contentType & "," & bytesToString(body.data)
         else:
           "nobody"
 
@@ -503,7 +503,8 @@ suite "Secure REST API server test suite":
 
     router.api(MethodPost, "/test/{smp1}") do (
       smp1: int, opt1: Option[int], opt4: seq[int],
-      body: Option[ContentBody], resp: HttpResponseRef) -> RestApiResponse:
+      body: Option[ContentBody],
+      resp: HttpResponseRef) -> RestApiResponse:
 
       if smp1.isErr():
         return RestApiResponse.error(Http411, $smp1.error())
@@ -524,7 +525,7 @@ suite "Secure REST API server test suite":
       let obody =
         if body.isSome():
           let b = body.get()
-          b.contentType & "," & bytesToString(b.data)
+          $b.contentType & "," & bytesToString(b.data)
         else:
           "nobody"
 

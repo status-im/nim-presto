@@ -17,10 +17,11 @@ import common, segpath, macrocommon
 export chronos, options, common, httpcommon, httptable
 
 type
-  RestApiCallback* = proc(request: HttpRequestRef, pathParams: HttpTable,
-                          queryParams: HttpTable,
-                          body: Option[ContentBody]): Future[RestApiResponse] {.
-                       raises: [Defect], gcsafe.}
+  RestApiCallback* =
+    proc(request: HttpRequestRef, pathParams: HttpTable,
+         queryParams: HttpTable,
+         body: Option[ContentBody]): Future[RestApiResponse] {.
+      raises: [Defect], gcsafe.}
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
@@ -59,10 +60,12 @@ proc init*(t: typedesc[RestRouter],
              routes: initBTree[SegmentedPath, RestRouteItem](),
              allowedOrigin: allowedOrigin)
 
-proc optionsRequestHandler(request: HttpRequestRef,
-                           pathParams: HttpTable,
-                           queryParams: HttpTable,
-                           body: Option[ContentBody]): Future[RestApiResponse] {.async.} =
+proc optionsRequestHandler(
+       request: HttpRequestRef,
+       pathParams: HttpTable,
+       queryParams: HttpTable,
+       body: Option[ContentBody]
+     ): Future[RestApiResponse] {.async.} =
   return RestApiResponse.response("", Http200)
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
@@ -365,10 +368,11 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
   var res = newStmtList()
   res.add quote do:
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
-                  `queryParams`: HttpTable, `bodyParam`: Option[ContentBody]
+                  `queryParams`: HttpTable,
+                  `bodyParam`: Option[ContentBody]
                  ): Future[RestApiResponse] {.raises: [Defect], async.} =
       template preferredContentType(
-                         t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
+        t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
         `requestParam`.preferredContentType(t)
       `pathDecoder`
       `optDecoder`

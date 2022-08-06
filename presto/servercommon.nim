@@ -20,7 +20,7 @@ chronicles.formatIt(HttpTable):
 chronicles.formatIt(Option[ContentBody]):
   if it.isSome():
     let body = it.get()
-    "(" & body.contentType & ", " & $len(body.data) & " bytes)"
+    "(" & $body.contentType & ", " & $len(body.data) & " bytes)"
   else:
     "(None)"
 
