@@ -97,7 +97,7 @@ proc error*(t: typedesc[RestApiResponse],
   error(t, status, msg, contentType, HttpTable.init())
 
 proc response*(t: typedesc[RestApiResponse], data: ByteChar,
-               status: HttpCode = Http200, contentType = "text/text",
+               status: HttpCode = Http200, contentType = "text/plain",
                headers: HttpTable): RestApiResponse =
   ## Create REST API data response with status ``status`` and content specified
   ## by type ``contentType`` and data ``data``. You can also specify
@@ -117,13 +117,13 @@ proc response*(t: typedesc[RestApiResponse], data: ByteChar,
                   headers: headers, content: content)
 
 proc response*(t: typedesc[RestApiResponse], data: ByteChar,
-               status: HttpCode = Http200, contentType = "text/text",
+               status: HttpCode = Http200, contentType = "text/plain",
                headers: openArray[RestKeyValueTuple]): RestApiResponse =
   response(t, data, status, contentType, HttpTable.init(headers))
 
 proc response*(t: typedesc[RestApiResponse], data: ByteChar,
                status: HttpCode = Http200,
-               contentType = "text/text"): RestApiResponse =
+               contentType = "text/plain"): RestApiResponse =
   response(t, data, status, contentType, HttpTable.init())
 
 proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,

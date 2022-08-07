@@ -89,12 +89,12 @@ suite "REST API client test suite":
 
     var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
     let res1 = await client.testSimple1()
-    let res2 = await client.testSimple2("ok-2", restContentType = "text/text")
+    let res2 = await client.testSimple2("ok-2", restContentType = "text/plain")
     let res5 = await client.testSimple5()
     let res6 = await client.testSimple6("ok-6", restContentType = "text/html")
     check:
       res1 == "ok-1"
-      res2 == "text/text,ok-2"
+      res2 == "text/plain,ok-2"
       res5 == "ok-5-redirect"
       res6 == "text/html,ok-6"
 
@@ -117,7 +117,7 @@ suite "REST API client test suite":
       let (code, message, contentType) =
         try:
           let res3 {.used.} = await client.testSimple4("ok-4",
-                                                  restContentType = "text/text")
+                                                  restContentType = "text/plain")
           (0, "", "")
         except RestResponseError as exc:
           (exc.status, exc.message, exc.contentType)
@@ -253,7 +253,7 @@ suite "REST API client test suite":
 
     let res1 = await client.testPath1(123456)
     let res2 = await client.testPath2(234567, "argstr1", "ok-2",
-                                      restContentType = "text/text")
+                                      restContentType = "text/plain")
     let res3 = await client.testGetPath3(345678, "argstr2",
                                          stringToBytes("876543"))
     let res4 = await client.testPostPath3(456789, "argstr3",
@@ -262,17 +262,17 @@ suite "REST API client test suite":
                                           restContentType = "text/html")
     let res5 = await client.testGetRedirect(567890)
     let res6 = await client.testPostRedirect(678901, "ok-post-6",
-                                             restContentType = "text/text")
+                                             restContentType = "text/plain")
     let res7 = await client.testGetPath3(345678, "запрос",
                                          stringToBytes("876543"))
 
     check:
       res1 == "ok:123456"
-      res2 == "234567:argstr1:text/text,ok-2"
+      res2 == "234567:argstr1:text/plain,ok-2"
       res3 == "345678:argstr2:876543"
       res4 == "456789:argstr3:987654:text/html,ok-post-4"
       res5 == "ok-redirect-567890"
-      res6 == "ok-redirect-678901:text/text,ok-post-6"
+      res6 == "ok-redirect-678901:text/plain,ok-post-6"
       res7 == "345678:запрос:876543"
 
     await client.closeWait()
@@ -472,35 +472,35 @@ suite "REST API client test suite":
       let res4 = await client.testQuery2()
       let res5 = await client.testQuery2(newSeq[int]())
       let res6 = await client.testQuery2(@[1,2,3,4,5,6])
-      let res7 = await client.testQuery3("body3", restContentType = "text/text")
+      let res7 = await client.testQuery3("body3", restContentType = "text/plain")
       let res8 = await client.testQuery3(none[int](), some("запрос"),
-        "body4", restContentType = "text/text")
+        "body4", restContentType = "text/plain")
       let res9 = await client.testQuery3(some(234567), none[string](),
-        "body5", restContentType = "text/text")
+        "body5", restContentType = "text/plain")
       let res10 = await client.testQuery3(some(345678), some("запрос"),
-        "body6", restContentType = "text/text")
+        "body6", restContentType = "text/plain")
       let res11 = await client.testQuery4("body4",
-                                          restContentType = "text/text")
+                                          restContentType = "text/plain")
       let res12 = await client.testQuery4(@[1, 2, 3], newSeq[string](),
-        "body5", restContentType = "text/text")
+        "body5", restContentType = "text/plain")
       let res13 = await client.testQuery4(newSeq[int](),
         @["запрос1", "запрос2", "запрос3"],
-        "body6", restContentType = "text/text")
+        "body6", restContentType = "text/plain")
       let res14 = await client.testQuery4(@[1, 2, 3],
         @["запрос1", "запрос2", "запрос3"],
-        "body7", restContentType = "text/text")
+        "body7", restContentType = "text/plain")
       let res15 = await client.testQueryGetRedirect(none[int]())
       let res16 = await client.testQueryGetRedirect(some(123456))
       let res17 = await client.testQueryGetRedirect(newSeq[int]())
       let res18 = await client.testQueryGetRedirect(@[11, 22, 33, 44, 55])
       let res19 = await client.testQueryPostRedirect(none[int](),
-        "bodyPost1", restContentType = "text/text")
+        "bodyPost1", restContentType = "text/plain")
       let res20 = await client.testQueryPostRedirect(some(123456),
-        "bodyPost2", restContentType = "text/text")
+        "bodyPost2", restContentType = "text/plain")
       let res21 = await client.testQueryPostRedirect(newSeq[int](),
-        "bodyPost3", restContentType = "text/text")
+        "bodyPost3", restContentType = "text/plain")
       let res22 = await client.testQueryPostRedirect(@[11, 22, 33, 44, 55],
-        "bodyPost4", restContentType = "text/text")
+        "bodyPost4", restContentType = "text/plain")
 
       check:
         res1 == "ok-1:[]"
@@ -509,22 +509,22 @@ suite "REST API client test suite":
         res4 == "ok-2:[]"
         res5 == "ok-2:[]"
         res6 == "ok-2:[1,2,3,4,5,6]"
-        res7 == "ok-3:[]:[]:text/text,body3"
-        res8 == "ok-3:[]:[запрос]:text/text,body4"
-        res9 == "ok-3:[234567]:[]:text/text,body5"
-        res10 == "ok-3:[345678]:[запрос]:text/text,body6"
-        res11 == "ok-4:[]:[]:text/text,body4"
-        res12 == "ok-4:[1,2,3]:[]:text/text,body5"
-        res13 == "ok-4:[]:[запрос1,запрос2,запрос3]:text/text,body6"
-        res14 == "ok-4:[1,2,3]:[запрос1,запрос2,запрос3]:text/text,body7"
+        res7 == "ok-3:[]:[]:text/plain,body3"
+        res8 == "ok-3:[]:[запрос]:text/plain,body4"
+        res9 == "ok-3:[234567]:[]:text/plain,body5"
+        res10 == "ok-3:[345678]:[запрос]:text/plain,body6"
+        res11 == "ok-4:[]:[]:text/plain,body4"
+        res12 == "ok-4:[1,2,3]:[]:text/plain,body5"
+        res13 == "ok-4:[]:[запрос1,запрос2,запрос3]:text/plain,body6"
+        res14 == "ok-4:[1,2,3]:[запрос1,запрос2,запрос3]:text/plain,body7"
         res15 == "ok-5:[]"
         res16 == "ok-5:[123456]"
         res17 == "ok-6:[]"
         res18 == "ok-6:[11,22,33,44,55]"
-        res19 == "ok-7:[]:text/text,bodyPost1"
-        res20 == "ok-7:[123456]:text/text,bodyPost2"
-        res21 == "ok-8:[]:text/text,bodyPost3"
-        res22 == "ok-8:[11,22,33,44,55]:text/text,bodyPost4"
+        res19 == "ok-7:[]:text/plain,bodyPost1"
+        res20 == "ok-7:[123456]:text/plain,bodyPost2"
+        res21 == "ok-8:[]:text/plain,bodyPost3"
+        res22 == "ok-8:[11,22,33,44,55]:text/plain,bodyPost4"
 
     await client1.closeWait()
     await client2.closeWait()
@@ -763,30 +763,30 @@ suite "REST API client test suite":
       let res2 = await client.testFull1(124, newSeq[int]())
       let res3 = await client.testFull1(125, @[16, 32, 64, 128, 256, 512, 1024])
       let res4 = await client.testFull2(126, "textarg1", "bodydata1",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res5 = await client.testFull2(127, "textarg2", newSeq[int](),
                                         "bodydata2",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res6 = await client.testFull2(128, "textarg3",
                                         @[16, 32, 64, 128, 256],
                                         "bodydata3",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res7 = await client.testFull2(129, "textarg4", newSeq[string](),
                                         "bodydata4",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res8 = await client.testFull2(130, "textarg5",
                                         @["запрос1", "запрос2", "запрос3"],
                                         "bodydata5",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res9 = await client.testFull2(131, "textarg6", newSeq[int](),
                                         newSeq[string](),
                                         "bodydata6",
-                                        restContentType = "text/text")
+                                        restContentType = "text/plain")
       let res10 = await client.testFull2(132, "textarg7",
                                          @[16, 32, 64, 128, 256],
                                          @["запрос1", "запрос2", "запрос3"],
                                          "bodydata7",
-                                         restContentType = "text/text")
+                                         restContentType = "text/plain")
       let res11 = await client.testFull3Get(133, "textarg1",
                                             stringToBytes("133"))
       let res12 = await client.testFull3Get(134, "textarg2",
@@ -835,99 +835,99 @@ suite "REST API client test suite":
       let res24 = await client.testFull3Post(146, "textarg1",
                                             stringToBytes("146"),
                                             "bodyArg1",
-                                            restContentType = "text/text1")
+                                            restContentType = "text/plain1")
       let res25 = await client.testFull3Post(147, "textarg2",
                                             stringToBytes("147"), newSeq[int](),
                                             "bodyArg2",
-                                            restContentType = "text/text2")
+                                            restContentType = "text/plain2")
       let res26 = await client.testFull3Post(148, "textarg3",
                                             stringToBytes("148"),
                                             @[16, 32, 64, 128, 256],
                                             "bodyArg3",
-                                            restContentType = "text/text3")
+                                            restContentType = "text/plain3")
       let res27 = await client.testFull3Post(149, "textarg4",
                                             stringToBytes("149"),
                                             newSeq[string](),
                                             "bodyArg4",
-                                            restContentType = "text/text4")
+                                            restContentType = "text/plain4")
       let res28 = await client.testFull3Post(150, "textarg5",
                                             stringToBytes("150"),
                                             @["запрос1", "запрос2", "запрос3"],
                                             "bodyArg5",
-                                            restContentType = "text/text5")
+                                            restContentType = "text/plain5")
       let res29 = await client.testFull3Post(151, "textarg6",
                                             stringToBytes("151"),
                                             none[seq[byte]](),
                                             "bodyArg6",
-                                            restContentType = "text/text6")
+                                            restContentType = "text/plain6")
       let res30 = await client.testFull3Post(152, "textarg7",
                                             stringToBytes("152"),
                                             some(stringToBytes("byteArg1")),
                                             "bodyArg7",
-                                            restContentType = "text/text7")
+                                            restContentType = "text/plain7")
       let res31 = await client.testFull3Post(153, "textarg8",
                                             stringToBytes("153"),
                                             newSeq[int](),
                                             none[seq[byte]](),
                                             "bodyArg8",
-                                            restContentType = "text/text8")
+                                            restContentType = "text/plain8")
       let res32 = await client.testFull3Post(154, "textarg9",
                                             stringToBytes("154"),
                                             @[16, 32, 64, 128, 256],
                                             none[seq[byte]](),
                                             "bodyArg9",
-                                            restContentType = "text/text9")
+                                            restContentType = "text/plain9")
       let res33 = await client.testFull3Post(155, "textarg10",
                                             stringToBytes("155"),
                                             newSeq[int](),
                                             some(stringToBytes("byteArg2")),
                                             "bodyArg10",
-                                            restContentType = "text/text10")
+                                            restContentType = "text/plain10")
       let res34 = await client.testFull3Post(156, "textarg11",
                                             stringToBytes("156"),
                                             @[16, 32, 64, 128, 256],
                                             some(stringToBytes("byteArg3")),
                                             "bodyArg11",
-                                            restContentType = "text/text11")
+                                            restContentType = "text/plain11")
       let res35 = await client.testFull3Post(157, "textarg12",
                                             stringToBytes("157"),
                                             newSeq[int](),
                                             newSeq[string](),
                                             none[seq[byte]](),
                                             "bodyArg12",
-                                            restContentType = "text/text12")
+                                            restContentType = "text/plain12")
       let res36 = await client.testFull3Post(158, "textarg13",
                                             stringToBytes("158"),
                                             @[16, 32, 64, 128, 256],
                                             @["запрос1", "запрос2", "запрос3"],
                                             some(stringToBytes("byteArg4")),
                                             "bodyArg13",
-                                            restContentType = "text/text13")
+                                            restContentType = "text/plain13")
       let res37 = await client.testFull4Redirect(159)
       let res38 = await client.testFull4Redirect(160, newSeq[int]())
       let res39 = await client.testFull4Redirect(161, @[16, 32, 64, 128, 256])
       let res40 = await client.testFull5Redirect(162, "bodyArg14",
-                                                 restContentType = "text/text")
+                                                 restContentType = "text/plain")
       let res41 = await client.testFull5Redirect(163, newSeq[int](),
                                                  "bodyArg15",
-                                                 restContentType = "text/text")
+                                                 restContentType = "text/plain")
       let res42 = await client.testFull5Redirect(164, @[256, 512, 1024, 2048],
                                                  "bodyArg16",
-                                                 restContentType = "text/text")
+                                                 restContentType = "text/plain")
 
       check:
         res1 == "ok-1:123:[]"
         res2 == "ok-1:124:[]"
         res3 == "ok-1:125:[16,32,64,128,256,512,1024]"
-        res4 == "ok-2:126:textarg1:[]:[]:text/text,bodydata1"
-        res5 == "ok-2:127:textarg2:[]:[]:text/text,bodydata2"
-        res6 == "ok-2:128:textarg3:[16,32,64,128,256]:[]:text/text,bodydata3"
-        res7 == "ok-2:129:textarg4:[]:[]:text/text,bodydata4"
-        res8 == "ok-2:130:textarg5:[]:[запрос1,запрос2,запрос3]:text/text," &
+        res4 == "ok-2:126:textarg1:[]:[]:text/plain,bodydata1"
+        res5 == "ok-2:127:textarg2:[]:[]:text/plain,bodydata2"
+        res6 == "ok-2:128:textarg3:[16,32,64,128,256]:[]:text/plain,bodydata3"
+        res7 == "ok-2:129:textarg4:[]:[]:text/plain,bodydata4"
+        res8 == "ok-2:130:textarg5:[]:[запрос1,запрос2,запрос3]:text/plain," &
                 "bodydata5"
-        res9 == "ok-2:131:textarg6:[]:[]:text/text,bodydata6"
+        res9 == "ok-2:131:textarg6:[]:[]:text/plain,bodydata6"
         res10 == "ok-2:132:textarg7:[16,32,64,128,256]:[запрос1,запрос2," &
-                 "запрос3]:text/text,bodydata7"
+                 "запрос3]:text/plain,bodydata7"
         res11 == "ok-3:133:textarg1:133:[]:[]:[]"
         res12 == "ok-3:134:textarg2:134:[]:[]:[]"
         res13 == "ok-3:135:textarg3:135:[16,32,64,128,256]:[]:[]"
@@ -942,30 +942,30 @@ suite "REST API client test suite":
         res22 == "ok-3:144:textarg12:144:[]:[]:[]"
         res23 == "ok-3:145:textarg13:145:[16,32,64,128,256]:[запрос1,запрос2," &
                  "запрос3]:[byteArg4]"
-        res24 == "ok-3:146:textarg1:146:[]:[]:[]:text/text1,bodyArg1"
-        res25 == "ok-3:147:textarg2:147:[]:[]:[]:text/text2,bodyArg2"
-        res26 == "ok-3:148:textarg3:148:[16,32,64,128,256]:[]:[]:text/text3," &
+        res24 == "ok-3:146:textarg1:146:[]:[]:[]:text/plain1,bodyArg1"
+        res25 == "ok-3:147:textarg2:147:[]:[]:[]:text/plain2,bodyArg2"
+        res26 == "ok-3:148:textarg3:148:[16,32,64,128,256]:[]:[]:text/plain3," &
                  "bodyArg3"
-        res27 == "ok-3:149:textarg4:149:[]:[]:[]:text/text4,bodyArg4"
+        res27 == "ok-3:149:textarg4:149:[]:[]:[]:text/plain4,bodyArg4"
         res28 == "ok-3:150:textarg5:150:[]:[запрос1,запрос2,запрос3]:[]:" &
-                 "text/text5,bodyArg5"
-        res29 == "ok-3:151:textarg6:151:[]:[]:[]:text/text6,bodyArg6"
-        res30 == "ok-3:152:textarg7:152:[]:[]:[byteArg1]:text/text7,bodyArg7"
-        res31 == "ok-3:153:textarg8:153:[]:[]:[]:text/text8,bodyArg8"
-        res32 == "ok-3:154:textarg9:154:[16,32,64,128,256]:[]:[]:text/text9," &
+                 "text/plain5,bodyArg5"
+        res29 == "ok-3:151:textarg6:151:[]:[]:[]:text/plain6,bodyArg6"
+        res30 == "ok-3:152:textarg7:152:[]:[]:[byteArg1]:text/plain7,bodyArg7"
+        res31 == "ok-3:153:textarg8:153:[]:[]:[]:text/plain8,bodyArg8"
+        res32 == "ok-3:154:textarg9:154:[16,32,64,128,256]:[]:[]:text/plain9," &
                  "bodyArg9"
-        res33 == "ok-3:155:textarg10:155:[]:[]:[byteArg2]:text/text10,bodyArg10"
+        res33 == "ok-3:155:textarg10:155:[]:[]:[byteArg2]:text/plain10,bodyArg10"
         res34 == "ok-3:156:textarg11:156:[16,32,64,128,256]:[]:[byteArg3]:" &
-                 "text/text11,bodyArg11"
-        res35 == "ok-3:157:textarg12:157:[]:[]:[]:text/text12,bodyArg12"
+                 "text/plain11,bodyArg11"
+        res35 == "ok-3:157:textarg12:157:[]:[]:[]:text/plain12,bodyArg12"
         res36 == "ok-3:158:textarg13:158:[16,32,64,128,256]:[запрос1,запрос2," &
-                 "запрос3]:[byteArg4]:text/text13,bodyArg13"
+                 "запрос3]:[byteArg4]:text/plain13,bodyArg13"
         res37 == "ok-redirect-159:[]"
         res38 == "ok-redirect-160:[]"
         res39 == "ok-redirect-161:[16,32,64,128,256]"
-        res40 == "ok-redirect-162:[]:text/text,bodyArg14"
-        res41 == "ok-redirect-163:[]:text/text,bodyArg15"
-        res42 == "ok-redirect-164:[256,512,1024,2048]:text/text,bodyArg16"
+        res40 == "ok-redirect-162:[]:text/plain,bodyArg14"
+        res41 == "ok-redirect-163:[]:text/plain,bodyArg15"
+        res42 == "ok-redirect-164:[256,512,1024,2048]:text/plain,bodyArg16"
 
     await client1.closeWait()
     await client2.closeWait()
@@ -979,7 +979,7 @@ suite "REST API client test suite":
     router.api(MethodGet, "/test/error/411") do () -> RestApiResponse:
       return RestApiResponse.error(Http411, "ERROR-411")
     router.api(MethodGet, "/test/success/200") do () -> RestApiResponse:
-      return RestApiResponse.response("SUCCESS-200", Http200, "text/text")
+      return RestApiResponse.response("SUCCESS-200", Http200, "text/plain")
     router.api(MethodGet, "/test/success/204") do () -> RestApiResponse:
       return RestApiResponse.response("204", Http204, "text/integer")
 
@@ -1044,7 +1044,7 @@ suite "REST API client test suite":
       res7.contentType == "text/html"
       bytesToString(res7.data) == "ERROR-411"
       res8.status == 200
-      res8.contentType == "text/text"
+      res8.contentType == "text/plain"
       bytesToString(res8.data) == "SUCCESS-200"
       res9.status == 204
       res9.contentType == "text/integer"
@@ -1065,7 +1065,7 @@ suite "REST API client test suite":
       res12.contentType == "text/html"
       res12.data == "ERROR-411"
       res13.status == 200
-      res13.contentType == "text/text"
+      res13.contentType == "text/plain"
       res13.data == "SUCCESS-200"
       res14.status == 204
       res14.contentType == "text/integer"
