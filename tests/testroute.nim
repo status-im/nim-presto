@@ -32,7 +32,7 @@ proc sendMockRequest(router: RestRouter, meth: HttpMethod,
 proc sendMockRequest(router: RestRouter, meth: HttpMethod,
                      url: string, data: string): RestApiResponse =
   let contentBody = ContentBody.init(
-    MediaType.init("text/text"), stringToBytes(data))
+    MediaType.init("text/plain"), stringToBytes(data))
   sendMockRequest(router, meth, url, some[ContentBody](contentBody))
 
 suite "REST API router & macro tests":

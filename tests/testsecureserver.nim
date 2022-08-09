@@ -429,24 +429,24 @@ suite "Secure REST API server test suite":
 
     const PostVectors = [
       (
-        ("/test/1/2/0xaa", "text/text", "textbody"),
+        ("/test/1/2/0xaa", "text/plain", "textbody"),
         ClientResponse(status: 200,
-                       data: "1:2:aa:::::::text/text,textbody")
+                       data: "1:2:aa:::::::text/plain,textbody")
       ),
       (
         ("/test/1/2/0xaa", "", ""),
         ClientResponse(status: 400)
       ),
       (
-        ("/test/1/2/0xaa", "text/text", ""),
+        ("/test/1/2/0xaa", "text/plain", ""),
         ClientResponse(status: 200,
-                       data: "1:2:aa:::::::text/text,")
+                       data: "1:2:aa:::::::text/plain,")
       ),
       (
         ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
-         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE", "text/text", "textbody"),
+         "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE", "text/plain", "textbody"),
         ClientResponse(status: 200, data:
-                       "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/text,textbody")
+                       "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/plain,textbody")
       )
     ]
 
@@ -548,23 +548,23 @@ suite "Secure REST API server test suite":
       (
         # Empty result with response sent via `resp`.
         ("/test/1?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-         "text/text", "somebody"),
+         "text/plain", "somebody"),
          ClientResponse(status: 200,
-                        data: "1:2345:3456,4567,5678,6789:text/text,somebody")
+                        data: "1:2345:3456,4567,5678,6789:text/plain,somebody")
       ),
       (
         # Result with response sent via `resp`.
         ("/test/2?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-         "text/text", "somebody"),
+         "text/plain", "somebody"),
         ClientResponse(status: 200,
-                       data: "2:2345:3456,4567,5678,6789:text/text,somebody")
+                       data: "2:2345:3456,4567,5678,6789:text/plain,somebody")
       ),
       (
         # Error with response sent via `resp`.
         ("/test/3?opt1=2345&opt4=3456&opt4=4567&opt4=5678&opt4=6789",
-         "text/text", "somebody"),
+         "text/plain", "somebody"),
          ClientResponse(status: 200,
-                        data: "3:2345:3456,4567,5678,6789:text/text,somebody")
+                        data: "3:2345:3456,4567,5678,6789:text/plain,somebody")
       )
     ]
 
