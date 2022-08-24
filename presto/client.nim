@@ -138,7 +138,7 @@ proc new*(t: typedesc[RestClientRef],
           bufferSize: int = 4096,
           userAgent = PrestoIdent,
           socketFlags: set[SocketFlags] = {}
-         ): RestResult[RestClientRef] =
+         ): Result[RestClientRef, string] =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
                                    idleTimeout, idlePeriod, socketFlags)
@@ -147,12 +147,7 @@ proc new*(t: typedesc[RestClientRef],
   uri.query = ""
   uri.anchor = ""
 
-  let address =
-    block:
-      let res = session.getAddress(uri)
-      if res.isErr():
-        return err("Unable to resolve remote hostname")
-      res.get()
+  let address = ? session.getAddress(uri)
   ok(RestClientRef(session: session, address: address, agent: userAgent,
                    flags: flags))
 
