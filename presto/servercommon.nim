@@ -6,9 +6,10 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+import std/options
 import chronicles
 import common
-export chronicles
+export chronicles, options
 
 chronicles.formatIt(HttpTable):
   var res = newSeq[string]()
