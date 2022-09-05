@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import std/[uri, strutils]
-import stew/bitops2
+import stew/[bitops2, results]
 import chronos/apps
 import common
 export common, apps
@@ -88,11 +88,11 @@ proc getPairs*(spath: SegmentedPath, vpath: SegmentedPath): seq[KeyValueTuple] =
     res.add(item)
   res
 
-proc getValue(data: seq[KeyValueTuple], key: string): Option[string] =
+proc getValue(data: seq[KeyValueTuple], key: string): Opt[string] =
   for item in data:
     if item.key == key:
-      return some(item.value)
-  return none[string]()
+      return Opt.some(item.value)
+  return Opt.none(string)
 
 proc rewritePath*(spath: SegmentedPath, dpath: SegmentedPath,
                   vpath: SegmentedPath): SegmentedPath =
