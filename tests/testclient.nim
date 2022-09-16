@@ -1038,16 +1038,16 @@ suite "REST API client test suite":
 
     check:
       res6.status == 410
-      res6.contentType == "text/html"
+      res6.contentType == MediaType.init("text/html")
       bytesToString(res6.data) == "ERROR-410"
       res7.status == 411
-      res7.contentType == "text/html"
+      res7.contentType == MediaType.init("text/html")
       bytesToString(res7.data) == "ERROR-411"
       res8.status == 200
-      res8.contentType == "text/plain"
+      res8.contentType == MediaType.init("text/plain")
       bytesToString(res8.data) == "SUCCESS-200"
       res9.status == 204
-      res9.contentType == "text/integer"
+      res9.contentType == MediaType.init("text/integer")
       bytesToString(res9.data) == "204"
       res10.status == 404
 
@@ -1059,16 +1059,16 @@ suite "REST API client test suite":
 
     check:
       res11.status == 410
-      res11.contentType == "text/html"
+      res11.contentType == MediaType.init("text/html")
       res11.data == "ERROR-410"
       res12.status == 411
-      res12.contentType == "text/html"
+      res12.contentType == MediaType.init("text/html")
       res12.data == "ERROR-411"
       res13.status == 200
-      res13.contentType == "text/plain"
+      res13.contentType == MediaType.init("text/plain")
       res13.data == "SUCCESS-200"
       res14.status == 204
-      res14.contentType == "text/integer"
+      res14.contentType == MediaType.init("text/integer")
       res14.data == 204
       res15.status == 404
 
