@@ -73,11 +73,11 @@ proc decodeString*(t: typedesc[CustomType1],
     err("Unable to decode value")
 
 proc decodeBytes*(t: typedesc[CustomType1], value: openArray[byte],
-                  contentType: string): RestResult[CustomType1] =
+                  contentType: Opt[ContentTypeData]): RestResult[CustomType1] =
   discard
 
 proc decodeBytes*(t: typedesc[string], value: openArray[byte],
-                  contentType: string): RestResult[string] =
+                  contentType: Opt[ContentTypeData]): RestResult[string] =
   var res: string
   if len(value) > 0:
     res = newString(len(value))
@@ -85,7 +85,7 @@ proc decodeBytes*(t: typedesc[string], value: openArray[byte],
   ok(res)
 
 proc decodeBytes*(t: typedesc[int], value: openArray[byte],
-                  contentType: string): RestResult[int] =
+                  contentType: Opt[ContentTypeData]): RestResult[int] =
   if len(value) == 0:
     err("Could not find any integer")
   else:

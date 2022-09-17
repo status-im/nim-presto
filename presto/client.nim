@@ -28,12 +28,12 @@ type
 
   RestPlainResponse* = object
     status*: int
-    contentType*: string
+    contentType*: Opt[ContentTypeData]
     data*: seq[byte]
 
   RestResponse*[T] = object
     status*: int
-    contentType*: string
+    contentType*: Opt[ContentTypeData]
     data*: T
 
   RestStatus* = distinct int
@@ -69,6 +69,18 @@ proc `==`*(x, y: RestStatus): bool {.borrow.}
 proc `<=`*(x, y: RestStatus): bool {.borrow.}
 proc `<`*(x, y: RestStatus): bool {.borrow.}
 proc `$`*(x: RestStatus): string {.borrow.}
+
+proc `$`*(x: Opt[ContentTypeData]): string =
+  if x.isSome():
+    $x.get()
+  else:
+    "<missing>"
+
+proc `==`*(a: Opt[ContentTypeData], b: MediaType): bool =
+  if a.isNone():
+    false
+  else:
+    a.get() == b
 
 proc new*(t: typedesc[RestClientRef],
           url: string,
@@ -249,7 +261,7 @@ proc raiseRestResponseError*(resp: RestPlainResponse) {.
   msg.add("]")
   var error = newException(RestResponseError, msg)
   error.status = resp.status
-  error.contentType = resp.contentType
+  error.contentType = $resp.contentType
   error.message = bytesToString(resp.data)
   raise error
 
@@ -450,7 +462,7 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
         let res =
           block:
             let status = response.status
-            let contentType = response.headers.getString("content-type")
+            let contentType = response.contentType
             let data =
               block:
                 var default: seq[byte]
@@ -462,7 +474,7 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
             debug "Received REST response body from remote server",
                   status = response.status, http_method = $request.meth,
                   address, connection = request.connection,
-                  contentType = contentType, size = len(data)
+                  contentType = $contentType, size = len(data)
             await request.closeWait()
             request = nil
             await response.closeWait()
@@ -555,7 +567,7 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
         let res =
           block:
             let status = response.status
-            let contentType = response.headers.getString("content-type")
+            let contentType = response.contentType
             let data =
               block:
                 var default: seq[byte]
@@ -565,7 +577,7 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
                 else:
                   await response.getBodyBytes()
             debug "Received REST response body from remote server",
-                  contentType = contentType, size = len(data),
+                  contentType = $contentType, size = len(data),
                   address, connection = request.connection
             await request.closeWait()
             request = nil
