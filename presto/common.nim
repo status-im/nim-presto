@@ -29,13 +29,15 @@ type
     contentType*: string
 
   RestApiResponseKind* {.pure.} = enum
-    Empty, Error, Redirect, Content
+    Empty, Error, Redirect, Content, Status
 
   RestApiResponse* = object
     status*: HttpCode
     headers*: HttpTable
     case kind*: RestApiResponseKind
     of RestApiResponseKind.Empty:
+      discard
+    of RestApiResponseKind.Status:
       discard
     of RestApiResponseKind.Content:
       content*: ResponseContentBody
@@ -125,6 +127,22 @@ proc response*(t: typedesc[RestApiResponse], data: ByteChar,
                status: HttpCode = Http200,
                contentType = "text/plain"): RestApiResponse =
   response(t, data, status, contentType, HttpTable.init())
+
+proc response*(t: typedesc[RestApiResponse], status: HttpCode,
+               headers: HttpTable): RestApiResponse =
+  ## Create REST API data response with status ``status`` and without any
+  ## content. You can also specify additional HTTP response headers using
+  ## ``headers`` argument.
+  RestApiResponse(kind: RestApiResponseKind.Status, status: status,
+                  headers: headers)
+
+proc response*(t: typedesc[RestApiResponse],
+               status: HttpCode = Http200): RestApiResponse =
+  response(t, status, HttpTable.init())
+
+proc response*(t: typedesc[RestApiResponse], status: HttpCode,
+               headers: openArray[RestKeyValueTuple]): RestApiResponse =
+  response(t, status, HttpTable.init(headers))
 
 proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
                location: string, preserveQuery = false,

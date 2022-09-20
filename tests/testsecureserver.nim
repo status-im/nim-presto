@@ -435,12 +435,12 @@ suite "Secure REST API server test suite":
       ),
       (
         ("/test/1/2/0xaa", "", ""),
-        ClientResponse(status: 400)
+        ClientResponse(status: 200)
       ),
       (
         ("/test/1/2/0xaa", "text/plain", ""),
         ClientResponse(status: 200,
-                       data: "1:2:aa:::::::text/plain,")
+                       data: "1:2:aa:::::::nobody")
       ),
       (
         ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &

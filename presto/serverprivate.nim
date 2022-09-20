@@ -17,21 +17,21 @@ proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
   if r.meth notin PostMethods:
     return none[ContentBody]()
   else:
-    var default: seq[byte]
-    if r.contentTypeData.isNone():
-      raise newException(RestBadRequestError,
-                         "Incorrect/missing Content-Type header")
-    let data =
-      if r.hasBody():
-        await r.getBody()
-      else:
-        default
-    let cbody = ContentBody(contentType: r.contentTypeData.get(),
-                                   data: data)
-    return some[ContentBody](cbody)
+    if r.hasBody() and r.contentLength > 0:
+      if r.contentTypeData.isNone():
+        raise newException(RestBadRequestError,
+                           "Incorrect/missing Content-Type header")
+      let
+        data = await r.getBody()
+        cbody = ContentBody(contentType: r.contentTypeData.get(),
+                            data: data)
+      return some[ContentBody](cbody)
+    else:
+      return none[ContentBody]()
 
 proc originsMatch(requestOrigin, allowedOrigin: string): bool =
-  if allowedOrigin.startsWith("http://") or allowedOrigin.startsWith("https://"):
+  if allowedOrigin.startsWith("http://") or
+     allowedOrigin.startsWith("https://"):
     requestOrigin == allowedOrigin
   elif requestOrigin.startsWith("http://"):
     requestOrigin.toOpenArray(7, requestOrigin.len - 1) == allowedOrigin
@@ -117,6 +117,31 @@ proc processRestRequest*[T](server: T,
                       meth = $request.meth, peer = $request.remoteAddress(),
                       uri = $request.uri
               return await request.respond(Http410)
+            of RestApiResponseKind.Status:
+              var headers = HttpTable.init()
+              if server.router.allowedOrigin.isSome:
+                let origin = request.headers.getList("Origin")
+                let everyOriginAllowed = server.router.allowedOrigin.get == "*"
+                if origin.len == 1:
+                  if everyOriginAllowed:
+                    headers.add("Access-Control-Allow-Origin", "*")
+                  elif originsMatch(origin[0], server.router.allowedOrigin.get):
+                    # The Vary: Origin header to must be set to prevent
+                    # potential cache poisoning attacks:
+                    # https://textslashplain.com/2018/08/02/cors-and-vary/
+                    headers.add("Vary", "Origin")
+                    headers.add("Access-Control-Allow-Origin", origin[0])
+                elif origin.len > 1:
+                  return await request.respond(Http400,
+                    "Only a single Origin header must be specified")
+
+              debug "Received status response from handler",
+                    status = restRes.status.toInt(),
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri
+
+              headers.mergeHttpHeaders(restRes.headers)
+              return await request.respond(restRes.status, "", headers)
             of RestApiResponseKind.Content:
               var headers = HttpTable.init([("Content-Type",
                                             restRes.content.contentType)])
