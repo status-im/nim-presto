@@ -675,6 +675,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           (node, RestReturnKind.Status)
         of "RestPlainResponse":
           (node, RestReturnKind.PlainResponse)
+        of "RestHttpResponseRef":
+          (node, RestReturnKind.HttpResponse)
         else:
           (node, RestReturnKind.Value)
       of nnkBracketExpr:

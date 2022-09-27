@@ -1217,6 +1217,68 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "RestHttpResponse test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost, "/test/response") do (
+      contentBody: Option[ContentBody]) -> RestApiResponse:
+      let obody =
+        if contentBody.isSome():
+          let b = contentBody.get()
+          $b.contentType & "," & bytesToString(b.data)
+        else:
+          "nobody"
+      return RestApiResponse.response("post:[" & $obody & "]", Http200,
+                                      "application/json")
+    router.api(MethodGet, "/test/response") do (
+      param: Option[string]) -> RestApiResponse:
+      let obody =
+        if param.isSome():
+          param.get().get()
+        else:
+          "noparam"
+      return RestApiResponse.response("get:[" & obody & "]", Http200,
+                                      "application/json")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+
+    proc testResponse1(body: string): RestHttpResponseRef {.
+      rest, endpoint: "/test/response", meth: MethodPost,
+      accept: "*/*".}
+
+    proc testResponse2(param: Option[string]): RestHttpResponseRef {.
+      rest, endpoint: "/test/response", meth: MethodGet,
+      accept: "*/*".}
+
+    var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+
+    let res1 = await client.testResponse1("response1")
+    let res2 = await client.testResponse2(some("response2"))
+    check:
+      res1.status == 200
+      res2.status == 200
+      res1.contentType == MediaType.init("application", "json")
+      res2.contentType == MediaType.init("application", "json")
+
+    let data1 =
+      block:
+        let reader = res1.getBodyReader()
+        let data = await reader.read()
+        await reader.closeWait()
+        data
+
+    let data2 = await res2.getBodyBytes()
+    check:
+      data1.bytesToString() == "post:[application/json,response1]"
+      data2.bytesToString() == "get:[response2]"
+
+    await res1.closeWait()
+    await res2.closeWait()
+    await client.closeWait()
+    await server.stop()
+    await server.closeWait()
+
   test "Leaks test":
     proc getTrackerLeaks(tracker: string): bool =
       let tracker = getTracker(tracker)
