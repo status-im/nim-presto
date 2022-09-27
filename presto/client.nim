@@ -38,6 +38,8 @@ type
 
   RestStatus* = distinct int
 
+  RestHttpResponseRef* = HttpClientResponseRef
+
   RestClientFlag* {.pure.} = enum
     CommaSeparatedArray
 
@@ -47,7 +49,7 @@ type
     ConsumeBody
 
   RestReturnKind {.pure.} = enum
-    Status, PlainResponse, GenericResponse, Value
+    Status, PlainResponse, GenericResponse, Value, HttpResponse
 
 const
   DefaultAcceptContentType = "application/json"
@@ -416,10 +418,56 @@ template closeObjects(o1, o2, o3, o4: untyped): untyped =
     await o4.closeWait()
     o4 = nil
 
-proc requestWithoutBody*(req: HttpClientRequestRef,
-                         flags: set[RestRequestFlag]
-                        ): Future[RestPlainResponse] {.
-     async.} =
+proc processRestResponse(
+       response: HttpClientResponseRef,
+       flags: set[RestRequestFlag]
+     ): Future[RestPlainResponse] {.async.} =
+  let address = response.address
+  try:
+    let res =
+      block:
+        let
+          status = response.status
+          contentType = response.contentType
+          data =
+            block:
+              var default: seq[byte]
+              if RestRequestFlag.ConsumeBody in flags:
+                discard await response.consumeBody()
+                default
+              else:
+                await response.getBodyBytes()
+        debug "Received REST response body from remote server",
+              address, contentType = $contentType, size = len(data),
+              connection = response.connection
+        await response.closeWait()
+        RestPlainResponse(status: status, contentType: contentType,
+                          data: data)
+    return res
+  except CancelledError as exc:
+    debug "REST client was interrupted while reading response",
+          address, connection = response.connection
+    if not(isNil(response)):
+      await response.closeWait()
+    raise exc
+  except HttpError as exc:
+    debug "REST client failed to read response", address,
+          connection = response.connection, errorName = exc.name,
+          errorMsg = exc.msg
+    if not(isNil(response)):
+      await response.closeWait()
+    raiseRestCommunicationError(exc)
+  except CatchableError as exc:
+    debug "REST client got an unexpected exception while reading response",
+          address, connection = response.connection,
+          errorName = exc.name, errorMsg = exc.msg
+    if not(isNil(response)):
+      await response.closeWait()
+    raise(exc)
+
+proc requestWithoutBody*(
+       req: HttpClientRequestRef
+     ): Future[HttpClientResponseRef] {.async.} =
   var
     request = req
     redirect: HttpClientRequestRef = nil
@@ -459,29 +507,9 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
         request = redirect
         redirect = nil
       else:
-        let res =
-          block:
-            let status = response.status
-            let contentType = response.contentType
-            let data =
-              block:
-                var default: seq[byte]
-                if RestRequestFlag.ConsumeBody in flags:
-                  discard await response.consumeBody()
-                  default
-                else:
-                  await response.getBodyBytes()
-            debug "Received REST response body from remote server",
-                  status = response.status, http_method = $request.meth,
-                  address, connection = request.connection,
-                  contentType = $contentType, size = len(data)
-            await request.closeWait()
-            request = nil
-            await response.closeWait()
-            response = nil
-            RestPlainResponse(status: status, contentType: contentType,
-                              data: data)
-        return res
+        await request.closeWait()
+        request = nil
+        return response
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
@@ -502,10 +530,12 @@ proc requestWithoutBody*(req: HttpClientRequestRef,
       closeObjects(request, redirect, response)
       raiseRestCommunicationError(exc)
 
-proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
-                      nbytes: uint64, chunkSize: int,
-                      flags: set[RestRequestFlag]): Future[RestPlainResponse] {.
-     async.} =
+proc requestWithBody*(
+       req: HttpClientRequestRef,
+       pbytes: pointer,
+       nbytes: uint64,
+       chunkSize: int
+     ): Future[HttpClientResponseRef] {.async.} =
   doAssert(chunkSize > 0 and chunkSize <= high(int))
   var
     request = req
@@ -564,28 +594,9 @@ proc requestWithBody*(req: HttpClientRequestRef, pbytes: pointer,
         request = redirect
         redirect = nil
       else:
-        let res =
-          block:
-            let status = response.status
-            let contentType = response.contentType
-            let data =
-              block:
-                var default: seq[byte]
-                if RestRequestFlag.ConsumeBody in flags:
-                  discard await response.consumeBody()
-                  default
-                else:
-                  await response.getBodyBytes()
-            debug "Received REST response body from remote server",
-                  contentType = $contentType, size = len(data),
-                  address, connection = request.connection
-            await request.closeWait()
-            request = nil
-            await response.closeWait()
-            response = nil
-            RestPlainResponse(status: status, contentType: contentType,
-                              data: data)
-        return res
+        await request.closeWait()
+        request = nil
+        return response
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
@@ -633,6 +644,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
     requestFlagsIdent = newIdentNode("requestFlags")
     responseResultIdent = newIdentNode("responseResult")
     responseObjectIdent = newIdentNode("responseObject")
+    responseDataIdent = newIdentNode("responseData")
     clientIdent = newIdentNode(RestClientArg)
     contentTypeIdent = newIdentNode(RestContentTypeArg)
     acceptTypeIdent = newIdentNode(RestAcceptTypeArg)
@@ -880,8 +892,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           )
           await requestWithBody(`requestIdent`,
                                 cast[pointer](unsafeAddr `bodyIdent`[0]),
-                                uint64(len(`bodyIdent`)), chunkSize,
-                                `requestFlagsIdent`)
+                                uint64(len(`bodyIdent`)), chunkSize)
   else:
     statements.add quote do:
       let `responseObjectIdent` =
@@ -891,47 +902,58 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             `contentTypeIdent`, `acceptTypeIdent`,
             `extraHeadersIdent`, `methodValue`
           )
-          await requestWithoutBody(`requestIdent`, `requestFlagsIdent`)
+          await requestWithoutBody(`requestIdent`)
 
   case returnKind
   of RestReturnKind.Status:
     # Result will contain only HTTP status.
     statements.add quote do:
-      return RestStatus(`responseObjectIdent`.status)
+      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
+                                                          `requestFlagsIdent`)
+      return RestStatus(`responseDataIdent`.status)
   of RestReturnKind.PlainResponse:
     # Result will contain HTTP status, HTTP content-type and sequence of bytes.
     statements.add quote do:
-      return `responseObjectIdent`
+      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
+                                                          `requestFlagsIdent`)
+      return `responseDataIdent`
   of RestReturnKind.GenericResponse:
     # Result will contain HTTP status, HTTP content-type and decoded value.
     statements.add quote do:
+      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
+                                                          `requestFlagsIdent`)
       let `responseResultIdent` =
         block:
-          let res = decodeBytes(`returnType`, `responseObjectIdent`.data,
-                                `responseObjectIdent`.contentType)
+          let res = decodeBytes(`returnType`, `responseDataIdent`.data,
+                                `responseDataIdent`.contentType)
           if res.isErr():
             raiseRestDecodingBytesError(res.error())
           res.get()
       return RestResponse[`returnType`](
-        status: `responseObjectIdent`.status,
-        contentType: `responseObjectIdent`.contentType,
+        status: `responseDataIdent`.status,
+        contentType: `responseDataIdent`.contentType,
         data: `responseResultIdent`
       )
   of RestReturnKind.Value:
     # Result will be only decoded value, if HTTP status is not in [200, 299]
     # exception `RestResponseError` will be raised.
     statements.add quote do:
-      if `responseObjectIdent`.status < 200 or
-         `responseObjectIdent`.status >= 300:
-        raiseRestResponseError(`responseObjectIdent`)
+      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
+                                                          `requestFlagsIdent`)
+      if `responseDataIdent`.status < 200 or
+         `responseDataIdent`.status >= 300:
+        raiseRestResponseError(`responseDataIdent`)
       let `responseResultIdent` =
         block:
-          let res = decodeBytes(`returnType`, `responseObjectIdent`.data,
-                                `responseObjectIdent`.contentType)
+          let res = decodeBytes(`returnType`, `responseDataIdent`.data,
+                                `responseDataIdent`.contentType)
           if res.isErr():
             raiseRestDecodingBytesError(res.error())
           res.get()
       return `responseResultIdent`
+  of RestReturnKind.HttpResponse:
+    statements.add quote do:
+      return RestHttpResponseRef(`responseObjectIdent`)
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
                                     acceptTypeIdent, extraHeadersIdent,
