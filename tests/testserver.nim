@@ -27,8 +27,25 @@ proc cmpWithHeaders(a, b: ClientResponse): bool =
       return false
   true
 
+proc cmpNoContent(a, b: ClientResponse): bool =
+  if (a.status != b.status):
+    return false
+  for header in b.headers.items():
+    if header.key notin a.headers:
+      return false
+    let checkItems = a.headers.getList(header.key).sorted()
+    let expectItems = header.value.sorted()
+    if checkItems != expectItems:
+      return false
+  true
+
 proc init(t: typedesc[ClientResponse], status: int): ClientResponse =
   ClientResponse(status: status)
+
+proc init(t: typedesc[ClientResponse], status: int,
+          headers: openArray[tuple[key, value: string]]): ClientResponse =
+  let table = HttpTable.init(headers)
+  ClientResponse(status: status, headers: table)
 
 proc init(t: typedesc[ClientResponse], status: int,
           data: string): ClientResponse =
@@ -398,11 +415,11 @@ suite "REST API server test suite":
       ),
       (
         ("/test/1/2/0xaa", "", ""),
-        ClientResponse.init(400)
+        ClientResponse.init(200)
       ),
       (
         ("/test/1/2/0xaa", "text/plain", ""),
-        ClientResponse.init(200, "1:2:aa:::::::text/plain,")
+        ClientResponse.init(200, "1:2:aa:::::::nobody")
       ),
       (
         ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
@@ -707,6 +724,84 @@ suite "REST API server test suite":
       for item in HttpHeadersVectors:
         let res = await httpClient(serverAddress, MethodGet, item[0], "")
         check cmpWithHeaders(res, item[1])
+    finally:
+      await server.closeWait()
+
+  asyncTest "Responses without content test":
+    var router = RestRouter.init(testValidate)
+
+    router.api(MethodGet, "/test/get/nocontent") do (
+      param: Option[string]) -> RestApiResponse:
+      let testName = param.get().get()
+      case testName
+      of "test1":
+        return RestApiResponse.response()
+      of "test2":
+        let headers = HttpTable.init([("test-header", "NORESPONSE2"),
+                                      ("test-header", "2")])
+        return RestApiResponse.response(Http202, headers)
+      of "test3":
+        let headers = [("test-header", "NORESPONSE3"),
+                       ("test-header", "3")]
+        return RestApiResponse.response(Http203, headers)
+      else:
+        return RestApiResponse.error(Http400)
+
+    router.api(MethodPost, "/test/post/nocontent") do (
+      param: Option[string]) -> RestApiResponse:
+      let testName = param.get().get()
+      case testName
+      of "test1":
+        return RestApiResponse.response()
+      of "test2":
+        let headers = HttpTable.init([("test-header", "NORESPONSE2"),
+                                      ("test-header", "2")])
+        return RestApiResponse.response(Http202, headers)
+      of "test3":
+        let headers = [("test-header", "NORESPONSE3"),
+                       ("test-header", "3")]
+        return RestApiResponse.response(Http203, headers)
+      else:
+        return RestApiResponse.error(Http400)
+
+    const HttpGetHeadersVectors = [
+      ("/test/get/nocontent?param=test1",
+       ClientResponse.init(200, [])),
+      ("/test/get/nocontent?param=test2",
+       ClientResponse.init(202,
+         [("test-header", "NORESPONSE2"), ("test-header", "2")])),
+      ("/test/get/nocontent?param=test3",
+       ClientResponse.init(203,
+         [("test-header", "NORESPONSE3"), ("test-header", "3")]))
+    ]
+
+    const HttpPostHeadersVectors = [
+      ("/test/post/nocontent?param=test1",
+       ClientResponse.init(200, [])),
+      ("/test/post/nocontent?param=test2",
+       ClientResponse.init(202,
+         [("test-header", "NORESPONSE2"), ("test-header", "2")])),
+      ("/test/post/nocontent?param=test3",
+       ClientResponse.init(203,
+         [("test-header", "NORESPONSE3"), ("test-header", "3")]))
+    ]
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      for item in HttpGetHeadersVectors:
+        let res = await httpClient(serverAddress, MethodGet, item[0], "")
+        check:
+          cmpNoContent(res, item[1])
+          len(res.data) == 0
+          res.headers.getString("content-type") == ""
+      for item in HttpPostHeadersVectors:
+        let res = await httpClient(serverAddress, MethodPost, item[0], "")
+        check:
+          cmpNoContent(res, item[1])
+          len(res.data) == 0
+          res.headers.getString("content-type") == ""
     finally:
       await server.closeWait()
 
