@@ -1279,6 +1279,90 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "Connection management test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test/conn") do (
+      ) -> RestApiResponse:
+      return RestApiResponse.response("ok")
+    router.api(MethodPost, "/test/conn") do (
+      contentBody: Option[ContentBody]) -> RestApiResponse:
+      return RestApiResponse.response("ok")
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+
+    proc testGetConnection1(): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodGet.}
+    proc testGetConnection2(): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodGet,
+      connection: {}.}
+    proc testGetConnection3(): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodGet,
+      connection: {Dedicated}.}
+    proc testGetConnection4(): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodGet,
+      connection: {Close}.}
+    proc testGetConnection5(): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodGet,
+      connection: {Dedicated, Close}.}
+
+    proc testPostConnection1(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodPost.}
+    proc testPostConnection2(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodPost,
+      connection: {}.}
+    proc testPostConnection3(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodPost,
+      connection: {Dedicated}.}
+    proc testPostConnection4(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodPost,
+      connection: {Close}.}
+    proc testPostConnection5(body: string): RestPlainResponse {.
+      rest, endpoint: "/test/conn", meth: MethodPost,
+      connection: {Dedicated, Close}.}
+
+    template runGetTest(body: untyped, http: int, respbody: string,
+                        count: int): untyped =
+      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+      try:
+        let response = await body(client)
+        check:
+          response.status == http
+          response.data.bytesToString() == respbody
+          client.session.connectionsCount == count
+      finally:
+        await client.closeWait()
+
+    template runPostTest(body: untyped, http: int, respbody: string,
+                         count: int): untyped =
+      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+      try:
+        let resp = await body(client, "data")
+        check:
+          resp.status == http
+          resp.data.bytesToString() == respbody
+          client.session.connectionsCount == count
+      finally:
+        await client.closeWait()
+
+    try:
+      runGetTest(testGetConnection1, 200, "ok", 1)
+      runGetTest(testGetConnection2, 200, "ok", 1)
+      runGetTest(testGetConnection3, 200, "ok", 1)
+      runGetTest(testGetConnection4, 200, "ok", 0)
+      runGetTest(testGetConnection5, 200, "ok", 0)
+
+      runPostTest(testPostConnection1, 200, "ok", 1)
+      runPostTest(testPostConnection2, 200, "ok", 1)
+      runPostTest(testPostConnection3, 200, "ok", 1)
+      runPostTest(testPostConnection4, 200, "ok", 0)
+      runPostTest(testPostConnection5, 200, "ok", 0)
+
+    finally:
+      await server.stop()
+      await server.closeWait()
+
   test "Leaks test":
     proc getTrackerLeaks(tracker: string): bool =
       let tracker = getTracker(tracker)
