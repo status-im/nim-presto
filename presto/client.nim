@@ -13,10 +13,6 @@ import httputils, stew/base10
 import segpath, common, macrocommon, agent
 export httpclient, httptable, httpcommon, options, agent, httputils
 
-template endpoint*(v: string) {.pragma.}
-template meth*(v: HttpMethod) {.pragma.}
-template accept*(v: string) {.pragma.}
-
 type
   RestClient* = object of RootObj
     session*: HttpSessionRef
@@ -50,6 +46,16 @@ type
 
   RestReturnKind {.pure.} = enum
     Status, PlainResponse, GenericResponse, Value, HttpResponse
+
+  RestConnectionFlag* = enum
+    Dedicated, Close
+
+  RestConnectionFlags* = set[RestConnectionFlag]
+
+template endpoint*(v: string) {.pragma.}
+template meth*(v: HttpMethod) {.pragma.}
+template accept*(v: string) {.pragma.}
+template connection*(v: RestConnectionFlag) {.pragma.}
 
 const
   DefaultAcceptContentType = "application/json"
@@ -132,11 +138,19 @@ proc new*(t: typedesc[RestClientRef],
 proc closeWait*(client: RestClientRef) {.async.} =
   await client.session.closeWait()
 
+proc toHttpFlags(flags: RestConnectionFlags): set[HttpClientRequestFlag] =
+  var res: set[HttpClientRequestFlag]
+  if RestConnectionFlag.Dedicated in flags:
+    res.incl(HttpClientRequestFlag.DedicatedConnection)
+  if RestConnectionFlag.Close in flags:
+    res.incl(HttpClientRequestFlag.CloseConnection)
+  res
+
 proc createPostRequest*(client: RestClientRef, path: string, query: string,
                         contentType: string, acceptType: string,
                         extraHeaders: openArray[HttpHeaderTuple],
-                        httpMethod: HttpMethod,
-                        contentLength: uint64): HttpClientRequestRef =
+                        httpMethod: HttpMethod, contentLength: uint64,
+                        flags: RestConnectionFlags): HttpClientRequestRef =
   var address = client.address
   address.path = path
   address.query = query
@@ -149,12 +163,13 @@ proc createPostRequest*(client: RestClientRef, path: string, query: string,
   headers.add extraHeaders
 
   HttpClientRequestRef.new(client.session, address, httpMethod,
-                           headers = headers)
+                           headers = headers, flags = flags.toHttpFlags())
 
 proc createGetRequest*(client: RestClientRef, path: string, query: string,
                        contentType: string, acceptType: string,
                        extraHeaders: openArray[HttpHeaderTuple],
-                       httpMethod: HttpMethod): HttpClientRequestRef =
+                       httpMethod: HttpMethod,
+                       flags: RestConnectionFlags): HttpClientRequestRef =
   var address = client.address
   address.path = path
   address.query = query
@@ -165,7 +180,7 @@ proc createGetRequest*(client: RestClientRef, path: string, query: string,
   headers.add extraHeaders
 
   HttpClientRequestRef.new(client.session, address, httpMethod,
-                           headers = headers)
+                           headers = headers, flags = flags.toHttpFlags())
 
 proc getEndpointOrDefault(prc: NimNode,
                           default: string): string {.compileTime.} =
@@ -212,6 +227,14 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
   for node in pragmaNode.items():
     if node.kind == nnkIdent and node.strVal == "async":
       return node
+
+proc getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
+  let pragmaNode = prc.pragma()
+  for node in pragmaNode.items():
+    if node.kind == nnkExprColonExpr:
+      if node[0].kind == nnkIdent and node[0].strVal == "connection":
+        return copyNimTree(node[1])
+  return newTree(nnkCurly)
 
 proc raiseRestEncodingStringError*(field: static string) {.
      noreturn, noinline.} =
@@ -360,14 +383,14 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
           case item.kind
           of nnkIdent:
             case item.strVal().toLowerAscii()
-            of "rest", "async", "endpoint", "meth":
+            of "rest", "async", "endpoint", "meth", "accept", "connection":
               false
             else:
               true
           of nnkExprColonExpr:
             item[0].expectKind(nnkIdent)
             case item[0].strVal().toLowerAscii()
-            of "endpoint", "meth":
+            of "endpoint", "meth", "accept", "connection":
               false
             else:
               true
@@ -688,11 +711,14 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       else:
         (node, RestReturnKind.Value)
 
-  let endpointValue = prc.getEndpointOrDefault("")
-  let acceptValue = prc.getAcceptOrDefault(DefaultAcceptContentType)
-  let methodValue = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
-                                           ident("MethodGet")))
-  let spath = SegmentedPath.init(HttpMethod.MethodGet, endpointValue, nil)
+  let
+    connectionFlagsValue = prc.getConnectionPragma()
+    endpointValue = prc.getEndpointOrDefault("")
+    acceptValue = prc.getAcceptOrDefault(DefaultAcceptContentType)
+    methodValue = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
+                                         ident("MethodGet")))
+    spath = SegmentedPath.init(HttpMethod.MethodGet, endpointValue, nil)
+
   var patterns = spath.getPatterns()
 
   let isPostMethod = methodValue.isPostMethod()
@@ -890,7 +916,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             `clientIdent`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
             `extraHeadersIdent`, `methodValue`,
-            uint64(len(`bodyIdent`))
+            uint64(len(`bodyIdent`)), `connectionFlagsValue`
           )
           await requestWithBody(`requestIdent`,
                                 cast[pointer](unsafeAddr `bodyIdent`[0]),
@@ -902,7 +928,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           let `requestIdent` = createGetRequest(
             `clientIdent`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
-            `extraHeadersIdent`, `methodValue`
+            `extraHeadersIdent`, `methodValue`, `connectionFlagsValue`
           )
           await requestWithoutBody(`requestIdent`)
 
