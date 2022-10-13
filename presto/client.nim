@@ -57,26 +57,6 @@ template meth*(v: HttpMethod) {.pragma.}
 template accept*(v: string) {.pragma.}
 template connection*(v: RestConnectionFlag) {.pragma.}
 
-  RestConnectionFlag* = enum
-    Dedicated, Close
-
-  RestConnectionFlags* = set[RestConnectionFlag]
-
-template endpoint*(v: string) {.pragma.}
-template meth*(v: HttpMethod) {.pragma.}
-template accept*(v: string) {.pragma.}
-template connection*(v: RestConnectionFlag) {.pragma.}
-
-  RestConnectionFlag* = enum
-    Dedicated, Close
-
-  RestConnectionFlags* = set[RestConnectionFlag]
-
-template endpoint*(v: string) {.pragma.}
-template meth*(v: HttpMethod) {.pragma.}
-template accept*(v: string) {.pragma.}
-template connection*(v: RestConnectionFlag) {.pragma.}
-
 const
   DefaultAcceptContentType = "application/json"
   RestContentTypeArg = "restContentType"
