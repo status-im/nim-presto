@@ -99,10 +99,12 @@ proc new*(t: typedesc[RestClientRef],
           connectTimeout = HttpConnectTimeout,
           headersTimeout = HttpHeadersTimeout,
           bufferSize: int = 4096,
-          userAgent = PrestoIdent
+          userAgent = PrestoIdent,
+          idleTimeout = HttpConnectionIdleTimeout
          ): RestResult[RestClientRef] =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
-                                   headersTimeout, bufferSize, maxConnections)
+                                   headersTimeout, bufferSize, maxConnections,
+                                   idleTimeout)
   var uri = parseUri(url)
   uri.path = ""
   uri.query = ""
