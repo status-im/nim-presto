@@ -12,18 +12,22 @@ requires "nim >= 1.2.0",
          "chronicles",
          "stew"
 
-proc runTest(filename: string) =
-  let styleCheckStyle =
-    if (NimMajor, NimMinor) < (1, 6):
-      "hint"
-    else:
-      "error"
-  var excstr: string =
-    "nim c -r --hints:off --styleCheck:usages --styleCheck:" & styleCheckStyle &
-    " --skipParentCfg " & getEnv("NIMFLAGS") & " "
-  excstr.add("tests/" & filename)
-  exec excstr
-  rmFile "tests/" & filename.toExe
+let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
+let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
+let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
+let verbose = getEnv("V", "") notin ["", "0"]
+
+let styleCheckStyle = if (NimMajor, NimMinor) < (1, 6): "hint" else: "error"
+let cfg =
+  " --styleCheck:usages --styleCheck:" & styleCheckStyle &
+  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  " --skipParentCfg --skipUserCfg --outdir:build --nimcache:build/nimcache -f"
+
+proc build(args, path: string) =
+  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
+
+proc run(args, path: string) =
+  build args & " -r", path
 
 task test, "Runs rest tests":
-  runTest("testall")
+  run "", "tests/testall"
