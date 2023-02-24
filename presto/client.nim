@@ -899,12 +899,12 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   case returnKind
   of RestReturnKind.Status:
     statements.add quote do:
-      let `requestFlagsIdent`: set[RestRequestFlag] = {
+      let `requestFlagsIdent`: system.set[RestRequestFlag] = {
         RestRequestFlag.ConsumeBody
       }
   else:
     statements.add quote do:
-      let `requestFlagsIdent`: set[RestRequestFlag] = {}
+      let `requestFlagsIdent`: system.set[RestRequestFlag] = {}
 
   if isPostMethod:
     let bodyIdent = bodyArgument.get().ename
