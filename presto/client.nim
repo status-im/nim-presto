@@ -3,6 +3,7 @@
 #             (c) Copyright 2021-Present
 #         Status Research & Development GmbH
 #
+#
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
@@ -899,12 +900,12 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   case returnKind
   of RestReturnKind.Status:
     statements.add quote do:
-      let `requestFlagsIdent`: system.set[RestRequestFlag] = {
+      let `requestFlagsIdent`: set[RestRequestFlag] = {
         RestRequestFlag.ConsumeBody
       }
   else:
     statements.add quote do:
-      let `requestFlagsIdent`: system.set[RestRequestFlag] = {}
+      let `requestFlagsIdent`: set[RestRequestFlag] = {}
 
   if isPostMethod:
     let bodyIdent = bodyArgument.get().ename
