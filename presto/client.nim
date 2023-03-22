@@ -98,11 +98,14 @@ proc new*(t: typedesc[RestClientRef],
           maxRedirections: int = HttpMaxRedirections,
           connectTimeout = HttpConnectTimeout,
           headersTimeout = HttpHeadersTimeout,
+          idleTimeout = HttpConnectionIdleTimeout,
+          idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
           userAgent = PrestoIdent
          ): RestResult[RestClientRef] =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
-                                   headersTimeout, bufferSize, maxConnections)
+                                   headersTimeout, bufferSize, maxConnections,
+                                   idleTimeout, idlePeriod)
   var uri = parseUri(url)
   uri.path = ""
   uri.query = ""
@@ -126,11 +129,14 @@ proc new*(t: typedesc[RestClientRef],
           maxRedirections: int = HttpMaxRedirections,
           connectTimeout = HttpConnectTimeout,
           headersTimeout = HttpHeadersTimeout,
+          idleTimeout = HttpConnectionIdleTimeout,
+          idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
           userAgent = PrestoIdent
          ): RestClientRef =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
-                                   headersTimeout, bufferSize, maxConnections)
+                                   headersTimeout, bufferSize, maxConnections,
+                                   idleTimeout, idlePeriod)
   let address = ta.getAddress(scheme, "")
   RestClientRef(session: session, address: address, agent: userAgent,
                 flags: flags)
