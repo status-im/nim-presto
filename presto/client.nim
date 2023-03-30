@@ -867,10 +867,6 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           if res.isErr():
             raiseRestEncodingBytesError(`paramLiteral`)
           res.get()
-  else:
-    if isPostMethod:
-      error("POST/PUT/PATCH/DELETE requests must have `body` argument",
-            parameters)
 
   if len(pathArguments) > 0:
     let pathLiteral = newStrLitNode(endpointValue)
@@ -912,7 +908,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
     statements.add quote do:
       let `requestFlagsIdent`: system.set[RestRequestFlag] = {}
 
-  if isPostMethod:
+  if bodyArgument.isSome():
     let bodyIdent = bodyArgument.get().ename
     statements.add quote do:
       let `responseObjectIdent` =

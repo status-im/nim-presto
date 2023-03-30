@@ -1,16 +1,9 @@
-import std/[unittest, strutils]
+import std/strutils
 import helpers
-import chronos, chronos/apps
+import chronos, chronos/apps, chronos/unittest2/asynctests
 import ../presto/[route, segpath, server, client]
 
 when defined(nimHasUsed): {.used.}
-
-template asyncTest*(name: string, body: untyped): untyped =
-  test name:
-    waitFor((
-      proc() {.async, gcsafe.} =
-        body
-    )())
 
 suite "REST API client test suite":
   let serverAddress = initTAddress("127.0.0.1:30180")
@@ -58,10 +51,12 @@ suite "REST API client test suite":
       return RestApiResponse.response(obody)
 
     router.api(MethodGet, "/test/echo-authorization") do () -> RestApiResponse:
-      return RestApiResponse.response(request.headers.getString("Authorization"))
+      return RestApiResponse.response(
+        request.headers.getString("Authorization"))
 
     router.api(MethodPost, "/test/echo-authorization") do () -> RestApiResponse:
-      return RestApiResponse.response(request.headers.getString("Authorization"))
+      return RestApiResponse.response(
+        request.headers.getString("Authorization"))
 
     let serverFlags = {HttpServerFlags.NotifyDisconnect,
                        HttpServerFlags.QueryCommaSeparatedArray}
@@ -70,33 +65,41 @@ suite "REST API client test suite":
     let server = sres.get()
     server.start()
 
-    proc testSimple1(): string {.rest, endpoint: "/test/simple/1".}
-    proc testSimple2(body: string): string {.rest, endpoint: "/test/simple/2",
-                                             meth: MethodPost.}
-    proc testSimple3(): string {.rest, endpoint: "/test/simple/3".}
-    proc testSimple4(body: string): string {.rest, endpoint: "/test/simple/4",
-                                             meth: MethodPost.}
-    proc testSimple5(): string {.rest, endpoint: "/test/simple/5",
-                                 meth: HttpMethod.MethodGet.}
-    proc testSimple6(body: string): string {.rest, endpoint: "/test/simple/6",
-                                             meth: HttpMethod.MethodPost.}
+    proc testSimple1(): string {.
+         rest, endpoint: "/test/simple/1".}
+    proc testSimple2(body: string): string {.
+         rest, endpoint: "/test/simple/2", meth: MethodPost.}
+    proc testSimple3(): string {.
+         rest, endpoint: "/test/simple/3".}
+    proc testSimple4(body: string): string {.
+         rest, endpoint: "/test/simple/4", meth: MethodPost.}
+    proc testSimple5(): string {.
+         rest, endpoint: "/test/simple/5", meth: HttpMethod.MethodGet.}
+    proc testSimple6(body: string): string {.
+         rest, endpoint: "/test/simple/6", meth: HttpMethod.MethodPost.}
 
-    proc testEchoAuthorizationPost(body: string): string
-      {.rest, endpoint: "/test/echo-authorization", meth: HttpMethod.MethodPost.}
-
-    proc testEchoAuthorizationGet(): string
-      {.rest, endpoint: "/test/echo-authorization", meth: HttpMethod.MethodGet.}
+    proc testEmptyPost(): string {.
+         rest, endpoint: "/test/simple/2", meth: HttpMethod.MethodPost.}
+    proc testEchoAuthorizationPost(body: string): string {.
+         rest, endpoint: "/test/echo-authorization",
+         meth: HttpMethod.MethodPost.}
+    proc testEchoAuthorizationGet(): string {.
+         rest, endpoint: "/test/echo-authorization",
+         meth: HttpMethod.MethodGet.}
 
     var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
     let res1 = await client.testSimple1()
     let res2 = await client.testSimple2("ok-2", restContentType = "text/plain")
     let res5 = await client.testSimple5()
     let res6 = await client.testSimple6("ok-6", restContentType = "text/html")
+    let res7 = await client.testEmptyPost()
+
     check:
       res1 == "ok-1"
       res2 == "text/plain,ok-2"
       res5 == "ok-5-redirect"
       res6 == "text/html,ok-6"
+      res7 == "nobody"
 
     block:
       let (code, message, contentType) =
@@ -116,8 +119,8 @@ suite "REST API client test suite":
     block:
       let (code, message, contentType) =
         try:
-          let res3 {.used.} = await client.testSimple4("ok-4",
-                                                  restContentType = "text/plain")
+          let res3 {.used.} =
+            await client.testSimple4("ok-4", restContentType = "text/plain")
           (0, "", "")
         except RestResponseError as exc:
           (exc.status, exc.message, exc.contentType)
