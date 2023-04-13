@@ -31,3 +31,5 @@ proc run(args, path: string) =
 
 task test, "Runs rest tests":
   run "", "tests/testall"
+  if (NimMajor, NimMinor) > (1, 6):
+    run "--mm:refc", "tests/testall"
