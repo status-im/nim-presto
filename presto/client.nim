@@ -12,6 +12,7 @@ import chronicles except error
 import httputils, stew/base10
 import segpath, common, macrocommon, agent
 export httpclient, httptable, httpcommon, options, agent, httputils
+export SocketFlags
 
 type
   RestClient* = object of RootObj
@@ -101,11 +102,12 @@ proc new*(t: typedesc[RestClientRef],
           idleTimeout = HttpConnectionIdleTimeout,
           idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
-          userAgent = PrestoIdent
+          userAgent = PrestoIdent,
+          socketFlags: set[SocketFlags] = {}
          ): RestResult[RestClientRef] =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
-                                   idleTimeout, idlePeriod)
+                                   idleTimeout, idlePeriod, socketFlags)
   var uri = parseUri(url)
   uri.path = ""
   uri.query = ""
@@ -132,11 +134,12 @@ proc new*(t: typedesc[RestClientRef],
           idleTimeout = HttpConnectionIdleTimeout,
           idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
-          userAgent = PrestoIdent
+          userAgent = PrestoIdent,
+          socketFlags: set[SocketFlags] = {}
          ): RestClientRef =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
-                                   idleTimeout, idlePeriod)
+                                   idleTimeout, idlePeriod, socketFlags)
   let address = ta.getAddress(scheme, "")
   RestClientRef(session: session, address: address, agent: userAgent,
                 flags: flags)
