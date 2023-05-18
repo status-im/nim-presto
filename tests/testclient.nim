@@ -1282,7 +1282,7 @@ suite "REST API client test suite":
     await server.stop()
     await server.closeWait()
 
-  asyncTest "Connection management test":
+  asyncTest "Connection management test (Http11Pipeline)":
     var router = RestRouter.init(testValidate)
     router.api(MethodGet, "/test/conn") do (
       ) -> RestApiResponse:
@@ -1327,7 +1327,9 @@ suite "REST API client test suite":
 
     template runGetTest(body: untyped, http: int, respbody: string,
                         count: int): untyped =
-      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+      let httpFlags = {HttpClientFlag.Http11Pipeline}
+      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure,
+                                     httpFlags = httpFlags)
       try:
         let response = await body(client)
         check:
@@ -1339,7 +1341,9 @@ suite "REST API client test suite":
 
     template runPostTest(body: untyped, http: int, respbody: string,
                          count: int): untyped =
-      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+      let httpFlags = {HttpClientFlag.Http11Pipeline}
+      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure,
+                                     httpFlags = httpFlags)
       try:
         let resp = await body(client, "data")
         check:
