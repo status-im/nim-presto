@@ -26,6 +26,7 @@ type
   RestPlainResponse* = object
     status*: int
     contentType*: Opt[ContentTypeData]
+    headers*: HttpTable
     data*: seq[byte]
 
   RestResponse*[T] = object
@@ -474,7 +475,7 @@ proc processRestResponse(
               connection = response.connection
         await response.closeWait()
         RestPlainResponse(status: status, contentType: contentType,
-                          data: data)
+                          headers: response.headers, data: data)
     return res
   except CancelledError as exc:
     debug "REST client was interrupted while reading response",
