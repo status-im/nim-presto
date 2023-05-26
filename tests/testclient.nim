@@ -985,6 +985,16 @@ suite "REST API client test suite":
       return RestApiResponse.response("SUCCESS-200", Http200, "text/plain")
     router.api(MethodGet, "/test/success/204") do () -> RestApiResponse:
       return RestApiResponse.response("204", Http204, "text/integer")
+    router.api(MethodGet, "/test/headers/200") do () -> RestApiResponse:
+      let headers = HttpTable.init([
+        ("header1", "value1"), ("header2", "value2")
+      ])
+      return RestApiResponse.response("headers200", Http200, "text/plain",
+                                      headers)
+    router.api(MethodGet, "/test/headers/201") do () -> RestApiResponse:
+      let tuples = [("header3", "value3"), ("header4", "value4")]
+      return RestApiResponse.response("headers201", Http201, "text/plain",
+                                      tuples)
 
     var sres = RestServerRef.new(router, serverAddress)
     let server = sres.get()
@@ -1006,6 +1016,10 @@ suite "REST API client test suite":
          rest, endpoint: "/test/success/204".}
     proc testPlainResponse5(): RestPlainResponse {.rest,
          endpoint: "/test/noresource".}
+    proc testPlainResponse6(): RestPlainResponse {.rest,
+         endpoint: "/test/headers/200".}
+    proc testPlainResponse7(): RestPlainResponse {.rest,
+         endpoint: "/test/headers/201".}
 
     proc testGenericResponse1(): RestResponse[string] {.
          rest, endpoint: "/test/error/410".}
@@ -1038,6 +1052,8 @@ suite "REST API client test suite":
     let res8 = await client.testPlainResponse3()
     let res9 = await client.testPlainResponse4()
     let res10 = await client.testPlainResponse5()
+    let res100 = await client.testPlainResponse6()
+    let res101 = await client.testPlainResponse7()
 
     check:
       res6.status == 410
@@ -1053,6 +1069,17 @@ suite "REST API client test suite":
       res9.contentType == MediaType.init("text/integer")
       bytesToString(res9.data) == "204"
       res10.status == 404
+    check:
+      res100.status == 200
+      res100.contentType == MediaType.init("text/plain")
+      bytesToString(res100.data) == "headers200"
+      res100.headers.getString("header1") == "value1"
+      res100.headers.getString("header2") == "value2"
+      res101.status == 201
+      res101.contentType == MediaType.init("text/plain")
+      bytesToString(res101.data) == "headers201"
+      res101.headers.getString("header3") == "value3"
+      res101.headers.getString("header4") == "value4"
 
     let res11 = await client.testGenericResponse1()
     let res12 = await client.testGenericResponse2()
