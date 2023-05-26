@@ -470,29 +470,26 @@ proc processRestResponse(
               else:
                 await response.getBodyBytes()
         debug "Received REST response body from remote server",
-              address, contentType = $contentType, size = len(data),
-              connection = response.connection
+              address, contentType = $contentType, size = len(data)
         await response.closeWait()
         RestPlainResponse(status: status, contentType: contentType,
                           data: data)
     return res
   except CancelledError as exc:
     debug "REST client was interrupted while reading response",
-          address, connection = response.connection
+          address
     if not(isNil(response)):
       await response.closeWait()
     raise exc
   except HttpError as exc:
-    debug "REST client failed to read response", address,
-          connection = response.connection, errorName = exc.name,
-          errorMsg = exc.msg
+    debug "REST client failed to read response",
+          address, errorName = exc.name, errorMsg = exc.msg
     if not(isNil(response)):
       await response.closeWait()
     raiseRestCommunicationError(exc)
   except CatchableError as exc:
     debug "REST client got an unexpected exception while reading response",
-          address, connection = response.connection,
-          errorName = exc.name, errorMsg = exc.msg
+          address, errorName = exc.name, errorMsg = exc.msg
     if not(isNil(response)):
       await response.closeWait()
     raise(exc)
@@ -510,9 +507,8 @@ proc requestWithoutBody*(
       debug "Sending REST request to remote server", address,
             http_method = $request.meth
       response = await request.send()
-      debug "Got REST response headers from remote server",
-            status = response.status, http_method = $request.meth, address,
-            connection = request.connection
+      debug "Got REST response headers from remote server", address,
+            status = response.status, http_method = $request.meth
       if response.status >= 300 and response.status < 400:
         redirect =
           block:
@@ -531,7 +527,7 @@ proc requestWithoutBody*(
         let redirectAddress = redirect.address
         debug "Got HTTP redirection from remote server",
               status = response.status, http_method = $request.meth,
-              connection = request.connection, redirectAddress
+              redirectAddress
         await request.closeWait()
         request = nil
         await response.closeWait()
@@ -545,20 +541,17 @@ proc requestWithoutBody*(
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
-      debug "REST client request was interrupted", address,
-            connection = request.connection
+      debug "REST client request was interrupted", address
       closeObjects(request, redirect, response)
       raise exc
     except RestError as exc:
       debug "REST client redirection error", address,
-            connection = request.connection, errorName = exc.name,
-            errorMsg = exc.msg
+            errorName = exc.name, errorMsg = exc.msg
       closeObjects(request, redirect, response)
       raise exc
     except HttpError as exc:
       debug "REST client communication error", address,
-            connection = request.connection, errorName = exc.name,
-            errorMsg = exc.msg
+            errorName = exc.name, errorMsg = exc.msg
       closeObjects(request, redirect, response)
       raiseRestCommunicationError(exc)
 
@@ -584,7 +577,7 @@ proc requestWithBody*(
       # Sending HTTP request headers and obtain HTTP request body writer
       writer = await request.open()
       debug "Opened connection to remote server", address,
-            http_method = $request.meth, connection = request.connection
+            http_method = $request.meth
       # Sending HTTP request body
       var offset = 0'u64
       while offset < nbytes:
@@ -593,15 +586,14 @@ proc requestWithBody*(
         offset = offset + uint64(toWrite)
       # Finishing HTTP request body
       debug "REST request body has been sent", address, size = nbytes,
-             http_method = $request.meth, connection = request.connection
+             http_method = $request.meth
       await writer.finish()
       await writer.closeWait()
       writer = nil
       # Waiting for response headers
       response = await request.finish()
-      debug "Got REST response headers from remote server",
-            status = response.status, http_method = $request.meth,
-            address, connection = request.connection
+      debug "Got REST response headers from remote server", address,
+            status = response.status, http_method = $request.meth
       if response.status >= 300 and response.status < 400:
         # Handling redirection
         redirect =
@@ -632,20 +624,17 @@ proc requestWithBody*(
     except CancelledError as exc:
       # TODO: when `finally` proved to work inside loops, move closeWait() logic
       # to `finally` handler.
-      debug "REST request was interrupted", address,
-            connection = request.connection
+      debug "REST request was interrupted", address
       closeObjects(writer, request, redirect, response)
       raise exc
     except RestError as exc:
       debug "REST client redirection error", address,
-            connection = request.connection, errorName = exc.name,
-            errorMsg = exc.msg
+            errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
       raise exc
     except HttpError as exc:
       debug "REST client communication error", address,
-            connection = request.connection, errorName = exc.name,
-            errorMsg = exc.msg
+            errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
     except AsyncStreamError as exc:
@@ -653,13 +642,11 @@ proc requestWithBody*(
       # `AsyncStreamError` exception. This can happen when we sending request's
       # body.
       debug "REST client communication error", address,
-            connection = request.connection, errorName = exc.name,
-            errorMsg = exc.msg
+            errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
     except CatchableError as exc:
-      debug "REST client got an unexpected error",
-            address, connection = request.connection,
+      debug "REST client got an unexpected error", address,
             errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
       raise(exc)
@@ -909,7 +896,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       }
   else:
     statements.add quote do:
-      let `requestFlagsIdent`: system.set[RestRequestFlag] = {}
+      let `requestFlagsIdent` {.used.}: system.set[RestRequestFlag] = {}
 
   if bodyArgument.isSome():
     let bodyIdent = bodyArgument.get().ename
