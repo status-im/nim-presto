@@ -84,8 +84,6 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
       let
         optionsPath = SegmentedPath.init(
           MethodOptions, path, rr.patternCallback)
-        optionsRoute = rr.routes.getOrDefault(
-          optionsPath, RestRouteItem(kind: RestRouteKind.None))
       case route.kind
       of RestRouteKind.None:
         let optionsHandler = RestRouteItem(kind: RestRouteKind.Handler,

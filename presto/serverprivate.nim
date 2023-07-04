@@ -209,13 +209,13 @@ proc processRestRequest*[T](server: T,
           debug "Critical error occured while sending response",
                 meth = $request.meth, peer = $request.remoteAddress(),
                 uri = $request.uri, code = exc.code, error_msg = $exc.msg
-          return dumbResponse()
+          return defaultResponse()
         except CatchableError as exc:
           warn "Unexpected error occured while sending response",
                meth = $request.meth, peer = $request.remoteAddress(),
                uri = $request.uri,  error_msg = $exc.msg,
                error_name = $exc.name
-          return dumbResponse()
+          return defaultResponse()
       else:
         debug "Request is not part of API", peer = $request.remoteAddress(),
               meth = $request.meth, uri = $request.uri
@@ -233,4 +233,4 @@ proc processRestRequest*[T](server: T,
       debug "Remote peer dropped connection", peer = $httpErr.remote,
             reason = $httpErr.error, code = $httpErr.code
 
-    return dumbResponse()
+    return defaultResponse()

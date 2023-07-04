@@ -31,14 +31,14 @@ suite "SegmentedPath test suite":
       "/path1/path2/path3/{}/"
     ]
     for item in EmptyVectors:
-      expect AssertionError:
+      expect Defect:
         let path {.used.} = SegmentedPath.init(HttpMethod.MethodGet, item,
                                                validate)
   test "Too many segments path test":
     for i in 63 .. 128:
-      expect AssertionError:
+      expect Defect:
         let path {.used.} = SegmentedPath.init(createPatternsOnly(i), validate)
-      expect AssertionError:
+      expect Defect:
         let path {.used.} = SegmentedPath.init(createPathOnly(i), validate)
 
       let rpath1 = SegmentedPath.init(createPathOnly(i))
@@ -61,7 +61,7 @@ suite "SegmentedPath test suite":
       "/{a}/{b}/{a}"
     ]
     for item in NonUniqueVectors:
-      expect AssertionError:
+      expect Defect:
         let path {.used.} = SegmentedPath.init(HttpMethod.MethodGet, item,
                                                validate)
   test "Url-encoded path test":
@@ -113,5 +113,5 @@ suite "SegmentedPath test suite":
       check createPath(item[0], item[1]) == item[2]
 
     for item in BadVectors:
-      expect AssertionError:
+      expect Defect:
         let path {.used.} = createPath(item[0], item[1])

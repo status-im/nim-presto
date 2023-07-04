@@ -1318,7 +1318,8 @@ suite "REST API client test suite":
       contentBody: Option[ContentBody]) -> RestApiResponse:
       return RestApiResponse.response("ok")
 
-    var sres = RestServerRef.new(router, serverAddress)
+    var sres = RestServerRef.new(router, serverAddress,
+                                 serverFlags = {HttpServerFlags.Http11Pipeline})
     let server = sres.get()
     server.start()
 
@@ -1398,17 +1399,4 @@ suite "REST API client test suite":
       await server.closeWait()
 
   test "Leaks test":
-    proc getTrackerLeaks(tracker: string): bool =
-      let tracker = getTracker(tracker)
-      if isNil(tracker): false else: tracker.isLeaked()
-
-    check:
-      getTrackerLeaks("http.body.reader") == false
-      getTrackerLeaks("http.body.writer") == false
-      getTrackerLeaks("httpclient.connection") == false
-      getTrackerLeaks("httpclient.request") == false
-      getTrackerLeaks("httpclient.response") == false
-      getTrackerLeaks("async.stream.reader") == false
-      getTrackerLeaks("async.stream.writer") == false
-      getTrackerLeaks("stream.server") == false
-      getTrackerLeaks("stream.transport") == false
+    checkLeaks()

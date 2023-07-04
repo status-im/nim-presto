@@ -1,6 +1,6 @@
-import std/[unittest, strutils, algorithm]
+import std/[strutils, algorithm]
 import helpers
-import chronos, chronos/apps
+import chronos, chronos/apps, chronos/unittest2/asynctests
 import stew/byteutils
 import ../presto/route, ../presto/segpath, ../presto/server
 
@@ -884,7 +884,6 @@ suite "REST API server test suite":
     var router = RestRouter.init(testValidate)
     router.rawApi(MethodPost, "/test/post") do () -> RestApiResponse:
       let contentType = request.headers.getString(ContentTypeHeader)
-      let acceptType = request.headers.getString(AcceptHeaderName)
       let body = await request.getBody()
       return
         RestApiResponse.response(
@@ -903,8 +902,4 @@ suite "REST API server test suite":
       await server.closeWait()
 
   test "Leaks test":
-    check:
-      getTracker("async.stream.reader").isLeaked() == false
-      getTracker("async.stream.writer").isLeaked() == false
-      getTracker("stream.server").isLeaked() == false
-      getTracker("stream.transport").isLeaked() == false
+    checkLeaks()
