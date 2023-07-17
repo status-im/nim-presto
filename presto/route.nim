@@ -6,7 +6,6 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-
 import std/[macros, options]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import httputils
@@ -84,8 +83,6 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
       let
         optionsPath = SegmentedPath.init(
           MethodOptions, path, rr.patternCallback)
-        optionsRoute = rr.routes.getOrDefault(
-          optionsPath, RestRouteItem(kind: RestRouteKind.None))
       case route.kind
       of RestRouteKind.None:
         let optionsHandler = RestRouteItem(kind: RestRouteKind.Handler,

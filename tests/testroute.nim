@@ -409,83 +409,83 @@ suite "REST API router & macro tests":
     router.addRedirect(MethodPost, "/redirect/path/{pattern2}",
                                    "/unique/path/{pattern2")
 
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/unique/path/1", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/unique/path/2", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/unique/path/{pattern1}", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/unique/path/{pattern2}", apiCallback)
 
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/redirect/path/1", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/redirect/path/2", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/redirect/path/{pattern1}", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodGet, "/redirect/path/{pattern2}", apiCallback)
 
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/unique/path/1", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/unique/path/2", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/unique/path/{pattern1}", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/unique/path/{pattern2}", apiCallback)
 
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/redirect/path/1", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/redirect/path/2", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/redirect/path/{pattern1}", apiCallback)
-    expect AssertionError:
+    expect Defect:
       router.addRoute(MethodPost, "/redirect/path/{pattern2}", apiCallback)
 
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/unique/path/1", "/unique/1")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/unique/path/2", "/unique/2")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/unique/path/{pattern1}",
                                     "/unique/{pattern1}")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/unique/path/{pattern2}",
                                     "/unique/{pattern2}")
 
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/redirect/path/1", "/another/1")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/redirect/path/2", "/another/2")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/redirect/path/{pattern1}",
                                     "/another/{pattern1}")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodGet, "/redirect/path/{pattern2}",
                                     "/another/{pattern2}")
 
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/unique/path/1", "/unique/1")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/unique/path/2", "/unique/2")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/unique/path/{pattern1}",
                                      "/unique/{pattern1}")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/unique/path/{pattern2}",
                                      "/unique/{pattern2}")
 
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/redirect/path/1", "/another/1")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/redirect/path/2", "/another/2")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/redirect/path/{pattern1}",
                                      "/another/{pattern1}")
-    expect AssertionError:
+    expect Defect:
       router.addRedirect(MethodPost, "/redirect/path/{pattern2}",
                                      "/another/{pattern2}")
 
