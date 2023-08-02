@@ -10,6 +10,7 @@ skipDirs      = @["tests", "examples"]
 requires "nim >= 1.6.0",
          "chronos#head",
          "chronicles",
+         "metrics",
          "stew"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
