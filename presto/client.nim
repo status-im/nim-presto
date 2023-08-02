@@ -532,21 +532,22 @@ template closeObjects(o1, o2, o3, o4: untyped): untyped =
     await o4.closeWait()
     o4 = nil
 
-proc processStatusMetrics(ep: string, status: int) =
-  let sts = Base10.toString(uint64(status))
-  case status
-  of 100 .. 199:
-    presto_client_1xx_response_count.inc(1, @[ep, sts])
-  of 200 .. 299:
-    presto_client_2xx_response_count.inc(1, @[ep, sts])
-  of 300 .. 399:
-    presto_client_3xx_response_count.inc(1, @[ep, sts])
-  of 400 .. 499:
-    presto_client_4xx_response_count.inc(1, @[ep, sts])
-  of 500 .. 599:
-    presto_client_5xx_response_count.inc(1, @[ep, sts])
-  else:
-    presto_client_xxx_response_count.inc(1, @[ep, sts])
+when defined(metrics):
+  proc processStatusMetrics(ep: string, status: int) =
+    let sts = Base10.toString(uint64(status))
+    case status
+    of 100 .. 199:
+      presto_client_1xx_response_count.inc(1, @[ep, sts])
+    of 200 .. 299:
+      presto_client_2xx_response_count.inc(1, @[ep, sts])
+    of 300 .. 399:
+      presto_client_3xx_response_count.inc(1, @[ep, sts])
+    of 400 .. 499:
+      presto_client_4xx_response_count.inc(1, @[ep, sts])
+    of 500 .. 599:
+      presto_client_5xx_response_count.inc(1, @[ep, sts])
+    else:
+      presto_client_xxx_response_count.inc(1, @[ep, sts])
 
 proc processHttpResponseMetrics(response: HttpClientResponseRef,
                                 endpoint: Opt[string],
