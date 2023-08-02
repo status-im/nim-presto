@@ -1,5 +1,6 @@
 import std/strutils
 import helpers
+import metrics
 import chronos, chronos/apps, chronos/unittest2/asynctests
 import ../presto/[route, segpath, server, client]
 
@@ -1394,6 +1395,69 @@ suite "REST API client test suite":
       runPostTest(testPostConnection4, 200, "ok", 0)
       runPostTest(testPostConnection5, 200, "ok", 0)
 
+    finally:
+      await server.stop()
+      await server.closeWait()
+
+  asyncTest "Metrics declarations test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test/simple/1") do () -> RestApiResponse:
+      return RestApiResponse.response("ok")
+
+    proc test1(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics.}
+
+    proc test1p(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", meth: MethodGet, metrics.}
+
+    proc test2(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics: "/test/simple/1a".}
+
+    proc test2p(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", meth: MethodGet,
+      metrics: "/test/simple/1a".}
+
+    proc test3(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics,
+      metricsTypes: {ConnectTime, RequestTime, ResponseTime, Status}.}
+
+    proc test3p(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics, meth: MethodGet,
+      metricsTypes: {ConnectTime, RequestTime, ResponseTime, Status}.}
+
+    proc test4(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics,
+      metricsTypes: {}.}
+
+    proc test4p(): RestPlainResponse {.
+      rest, endpoint: "/test/simple/1", metrics, meth: MethodGet,
+      metricsTypes: {}.}
+
+    var sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"))
+    let server = sres.get()
+    server.start()
+
+    let serverAddress = server.server.instance.localAddress()
+
+    template runTest(body: untyped, http: int, respbody: string): untyped =
+      var client = RestClientRef.new(serverAddress, HttpClientScheme.NonSecure)
+      try:
+        let resp = await body(client)
+        check:
+          resp.status == http
+          resp.data.bytesToString() == respbody
+      finally:
+        await client.closeWait()
+
+    try:
+      runTest(test1, 200, "ok")
+      runTest(test1p, 200, "ok")
+      runTest(test2, 200, "ok")
+      runTest(test2p, 200, "ok")
+      runTest(test3, 200, "ok")
+      runTest(test3p, 200, "ok")
+      runTest(test4, 200, "ok")
+      runTest(test4p, 200, "ok")
     finally:
       await server.stop()
       await server.closeWait()

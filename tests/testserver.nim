@@ -1,8 +1,7 @@
 import std/[strutils, algorithm]
-import helpers
-import chronos, chronos/apps, chronos/unittest2/asynctests
-import stew/byteutils
-import ../presto/route, ../presto/segpath, ../presto/server
+import chronos, chronos/apps, chronos/unittest2/asynctests, stew/byteutils,
+       metrics
+import helpers, ../presto/route, ../presto/segpath, ../presto/server
 
 when defined(nimHasUsed): {.used.}
 
@@ -900,6 +899,39 @@ suite "REST API server test suite":
         res.data == "type[application/octet-stream:30313233343536373839]"
     finally:
       await server.closeWait()
+
+  asyncTest "API endpoints with metrics enabled test":
+    var router = RestRouter.init(testValidate)
+    router.metricsApi(MethodGet, "/test/get/1", {}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-1", Http200, "test/test")
+    router.metricsApi(MethodGet, "/test/get/2",
+                      {RestServerMetricsType.Status}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-2", Http200, "test/test")
+    router.metricsApi(MethodGet, "/test/get/3",
+                      {Response}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-3", Http200, "test/test")
+    router.metricsApi(MethodGet, "/test/get/4",
+                      {RestServerMetricsType.Status,
+                       Response}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-4", Http200, "test/test")
+    router.metricsApi(MethodGet, "/test/get/5",
+                      RestServerMetrics) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-5", Http200, "test/test")
+    router.rawMetricsApi(MethodGet, "/test/get/6", {}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-6", Http200, "test/test")
+    router.rawMetricsApi(MethodGet, "/test/get/7",
+                       {RestServerMetricsType.Status}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-7", Http200, "test/test")
+    router.rawMetricsApi(MethodGet, "/test/get/8",
+                         {Response}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-8", Http200, "test/test")
+    router.rawMetricsApi(MethodGet, "/test/get/9",
+                         {RestServerMetricsType.Status,
+                          Response}) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-9", Http200, "test/test")
+    router.rawMetricsApi(MethodGet, "/test/get/10",
+                         RestServerMetrics) do () -> RestApiResponse:
+      return RestApiResponse.response("ok-10", Http200, "test/test")
 
   test "Leaks test":
     checkLeaks()

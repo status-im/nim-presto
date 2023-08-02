@@ -15,6 +15,9 @@ import common, segpath, macrocommon
 
 export chronos, options, common, httpcommon, httptable
 
+when defined(metrics):
+  import metrics
+
 type
   RestApiCallback* =
     proc(request: HttpRequestRef, pathParams: HttpTable,
@@ -33,6 +36,7 @@ type
     routePath*: SegmentedPath
     callback*: RestApiCallback
     flags*: set[RestRouterFlag]
+    metrics*: set[RestServerMetricsType]
 
   RestRouteItem* = object
     case kind*: RestRouteKind
@@ -44,6 +48,7 @@ type
       redirectPath*: SegmentedPath
     path: SegmentedPath
     flags*: set[RestRouterFlag]
+    metrics*: set[RestServerMetricsType]
 
   RestRouter* = object
     patternCallback*: PatternCallback
@@ -68,7 +73,8 @@ proc optionsRequestHandler(
   return RestApiResponse.response("", Http200)
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               flags: set[RestRouterFlag], handler: RestApiCallback) {.
+               flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
+               handler: RestApiCallback) {.
      raises: [Defect].} =
   let spath = SegmentedPath.init(request, path, rr.patternCallback)
   let route = rr.routes.getOrDefault(spath,
@@ -76,7 +82,9 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
   case route.kind
   of RestRouteKind.None:
     let item = RestRouteItem(kind: RestRouteKind.Handler,
-                             path: spath, flags: flags, callback: handler)
+                             path: spath, flags: flags,
+                             metrics: metrics,
+                             callback: handler)
     rr.routes.add(spath, item)
 
     if rr.allowedOrigin.isSome:
@@ -88,6 +96,7 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
         let optionsHandler = RestRouteItem(kind: RestRouteKind.Handler,
                                            path: optionsPath,
                                            flags: {RestRouterFlag.Raw},
+                                           metrics: metrics,
                                            callback: optionsRequestHandler)
         rr.routes.add(optionsPath, optionsHandler)
       else:
@@ -100,7 +109,12 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
                handler: RestApiCallback) {.raises: [Defect].} =
-  addRoute(rr, request, path, {}, handler)
+  addRoute(rr, request, path, {}, {}, handler)
+
+proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+               flags: set[RestRouterFlag],
+               handler: RestApiCallback) {.raises: [Defect].} =
+  addRoute(rr, request, path, flags, {}, handler)
 
 proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
                   dstPath: string) {.raises: [Defect].} =
@@ -128,7 +142,8 @@ proc getRoute*(rr: RestRouter,
     of RestRouteKind.Handler:
       # Route handler was found
       let item = RestRoute(requestPath: path, routePath: route.path,
-                           flags: route.flags, callback: route.callback)
+                           flags: route.flags, callback: route.callback,
+                           metrics: route.metrics)
       return some(item)
     of RestRouteKind.Redirect:
       # Route redirection was found, so we perform path transformation
@@ -191,6 +206,7 @@ macro redirect*(router: RestRouter, meth: static[HttpMethod],
 
 proc processApiCall(router: NimNode, meth: HttpMethod,
                     path: string, flags: set[RestRouterFlag],
+                    metrics: set[RestServerMetricsType],
                     body: NimNode): NimNode {.compileTime.} =
   ## Define REST API endpoint and implementation.
   ## Input and return parameters are defined using the ``do`` notation.
@@ -366,8 +382,8 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
   res.add quote do:
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
                   `queryParams`: HttpTable,
-                  `bodyParam`: Option[ContentBody]
-                 ): Future[RestApiResponse] {.raises: [Defect], async.} =
+                  `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
+         raises: [Defect], async.} =
       template preferredContentType(
         t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
         `requestParam`.preferredContentType(t)
@@ -378,7 +394,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       block:
         `procBody`
 
-    `router`.addRoute(`methIdent`, `path`, `flags`, `doMain`)
+    addRoute(`router`, `methIdent`, `path`, `flags`, `metrics`, `doMain`)
 
   when defined(nimDumpRest):
     echo "\n", path, ": ", repr(res)
@@ -386,8 +402,20 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
 
 macro api*(router: RestRouter, meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
-  return processApiCall(router, meth, path, {}, body)
+  return processApiCall(router, meth, path, {}, {}, body)
 
 macro rawApi*(router: RestRouter, meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
-  return processApiCall(router, meth, path, {RestRouterFlag.Raw}, body)
+  return processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, body)
+
+macro metricsApi*(router: RestRouter, meth: static[HttpMethod],
+                  path: static[string],
+                  metrics: static[set[RestServerMetricsType]],
+                  body: untyped): untyped =
+  return processApiCall(router, meth, path, {}, metrics, body)
+
+macro rawMetricsApi*(router: RestRouter, meth: static[HttpMethod],
+                     path: static[string],
+                     metrics: static[set[RestServerMetricsType]],
+                     body: untyped): untyped =
+  return processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, body)

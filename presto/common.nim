@@ -64,6 +64,18 @@ type
     message*: string
   RestKeyValueTuple* = tuple[key: string, value: string]
 
+  RestServerMetricsType* {.pure.} = enum
+    Response, ## Enable metric which measures time used to prepare response
+    Status    ## Enable metric which counts response's HTTP status.
+
+  RestServerMetricsTypes* = set[RestServerMetricsType]
+
+const
+  RestServerMetrics* = {
+    RestServerMetricsType.Response,
+    RestServerMetricsType.Status
+  }
+
 proc init*(t: typedesc[ContentBody],
            contentType: MediaType, data: openArray[byte]): ContentBody =
   ContentBody(
