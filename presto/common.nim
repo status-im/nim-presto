@@ -6,9 +6,10 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos/apps, chronos/apps/http/httpclient
+import chronos/apps/http/httptable
 import stew/[results, byteutils], httputils
-export results, apps, httputils
+
+export results, httputils, httptable
 
 {.push raises: [Defect].}
 
