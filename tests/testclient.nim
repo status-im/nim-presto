@@ -1449,16 +1449,107 @@ suite "REST API client test suite":
       finally:
         await client.closeWait()
 
-    try:
-      runTest(test1, 200, "ok")
-      runTest(test1p, 200, "ok")
-      runTest(test2, 200, "ok")
-      runTest(test2p, 200, "ok")
-      runTest(test3, 200, "ok")
-      runTest(test3p, 200, "ok")
-      runTest(test4, 200, "ok")
-      runTest(test4p, 200, "ok")
-    finally:
+    runTest(test1, 200, "ok")
+    runTest(test1p, 200, "ok")
+    runTest(test2, 200, "ok")
+    runTest(test2p, 200, "ok")
+    runTest(test3, 200, "ok")
+    runTest(test3p, 200, "ok")
+    runTest(test4, 200, "ok")
+    runTest(test4p, 200, "ok")
+
+    await server.stop()
+    await server.closeWait()
+
+  asyncTest "Request without body cancellation leaks test":
+    var
+      counter = 0
+      exitLoop = false
+
+    proc testGetConnection(): RestPlainResponse {.
+         rest, endpoint: "/test/conn", meth: MethodGet.}
+
+    while not(exitLoop):
+      var router = RestRouter.init(testValidate)
+      router.api(MethodGet, "/test/conn") do () -> RestApiResponse:
+        return RestApiResponse.response("ok")
+
+      var sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"))
+      let
+        server = sres.get()
+        address = server.server.instance.localAddress()
+
+      server.start()
+
+      var client = RestClientRef.new(address, HttpClientScheme.NonSecure)
+      let responseFut = testGetConnection(client)
+
+      if counter > 0:
+        await stepsAsync(counter)
+
+      exitLoop =
+        if not(responseFut.finished()):
+          await cancelAndWait(responseFut)
+          check:
+            responseFut.cancelled() or responseFut.completed()
+          inc(counter)
+          false
+        else:
+          true
+
+      if responseFut.completed():
+        let response = await responseFut
+        check:
+          response.status == 200
+          response.data.bytesToString() == "ok"
+
+      await client.closeWait()
+      await server.stop()
+      await server.closeWait()
+
+  asyncTest "Request with body cancellation leaks test":
+    var
+      counter = 0
+      exitLoop = false
+
+    proc testPostConnection(): RestPlainResponse {.
+         rest, endpoint: "/test/conn", meth: MethodPost.}
+
+    while not(exitLoop):
+      var router = RestRouter.init(testValidate)
+      router.api(MethodPost, "/test/conn") do () -> RestApiResponse:
+        return RestApiResponse.response("ok")
+
+      var sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"))
+      let
+        server = sres.get()
+        address = server.server.instance.localAddress()
+
+      server.start()
+
+      var client = RestClientRef.new(address, HttpClientScheme.NonSecure)
+      let responseFut = testPostConnection(client, "data")
+
+      if counter > 0:
+        await stepsAsync(counter)
+
+      exitLoop =
+        if not(responseFut.finished()):
+          await cancelAndWait(responseFut)
+          check:
+            responseFut.cancelled() or responseFut.completed()
+          inc(counter)
+          false
+        else:
+          true
+
+      if responseFut.completed():
+        let response = await responseFut
+        check:
+          response.status == 200
+          response.data.bytesToString() == "ok"
+
+      await client.closeWait()
       await server.stop()
       await server.closeWait()
 
