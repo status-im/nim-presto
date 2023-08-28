@@ -13,23 +13,8 @@ import route, common, segpath, servercommon
 when defined(metrics):
   import metrics
 
-  declareGauge presto_server_1xx_response_count,
-               "Number of HTTP(s) 1xx server responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_2xx_response_count,
-               "Number of HTTP(s) 2xx server responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_3xx_response_count,
-               "Number of HTTP(s) 3xx server responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_4xx_response_count,
-               "Number of HTTP(s) 4xx server responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_5xx_response_count,
-               "Number of HTTP(s) 5xx server responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_xxx_response_count,
-               "Number of HTTP(s) unrecognized server responses",
+  declareGauge presto_server_response_status_count,
+               "Number of HTTP server responses with specific status",
                labels = ["endpoint", "status"]
   declareGauge presto_server_processed_request_count,
                "Number of HTTP(s) processed requests"
@@ -84,20 +69,7 @@ when defined(metrics):
         endpoint = $route.routePath
         icode = toInt(code)
         scode = Base10.toString(uint64(toInt(code)))
-
-      case icode
-      of 100 .. 199:
-        presto_server_1xx_response_count.inc(1, @[endpoint, scode])
-      of 200 .. 299:
-        presto_server_2xx_response_count.inc(1, @[endpoint, scode])
-      of 300 .. 399:
-        presto_server_3xx_response_count.inc(1, @[endpoint, scode])
-      of 400 .. 499:
-        presto_server_4xx_response_count.inc(1, @[endpoint, scode])
-      of 500 .. 599:
-        presto_server_5xx_response_count.inc(1, @[endpoint, scode])
-      else:
-        presto_server_xxx_response_count.inc(1, @[endpoint, scode])
+      presto_client_response_status_count.inc(1, @[endpoint, scode])
 
   proc processStatusMetrics(route: RestRoute, code: HttpCode,
                             duration: Duration) =

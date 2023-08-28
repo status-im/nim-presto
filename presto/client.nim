@@ -17,23 +17,8 @@ export SocketFlags
 when defined(metrics):
   import metrics
 
-  declareGauge presto_client_1xx_response_count,
-               "Number of received HTTP(s) 1xx client responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_client_2xx_response_count,
-               "Number of received HTTP(s) 2xx client responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_client_3xx_response_count,
-               "Number of received HTTP(s) 3xx client responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_client_4xx_response_count,
-               "Number of received HTTP(s) 4xx client responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_client_5xx_response_count,
-               "Number of received HTTP(s) 5xx client responses",
-               labels = ["endpoint", "status"]
-  declareGauge presto_client_xxx_response_count,
-               "Number of received HTTP(s) unrecognized client responses",
+  declareGauge presto_client_response_status_count,
+               "Number of received client responses with specific status",
                labels = ["endpoint", "status"]
   declareGauge presto_client_connect_time,
                "Time taken to establish connection with remote host",
@@ -535,19 +520,7 @@ template closeObjects(o1, o2, o3, o4: untyped): untyped =
 when defined(metrics):
   proc processStatusMetrics(ep: string, status: int) =
     let sts = Base10.toString(uint64(status))
-    case status
-    of 100 .. 199:
-      presto_client_1xx_response_count.inc(1, @[ep, sts])
-    of 200 .. 299:
-      presto_client_2xx_response_count.inc(1, @[ep, sts])
-    of 300 .. 399:
-      presto_client_3xx_response_count.inc(1, @[ep, sts])
-    of 400 .. 499:
-      presto_client_4xx_response_count.inc(1, @[ep, sts])
-    of 500 .. 599:
-      presto_client_5xx_response_count.inc(1, @[ep, sts])
-    else:
-      presto_client_xxx_response_count.inc(1, @[ep, sts])
+    presto_client_response_status_count.inc(1, @[ep, sts])
 
 proc processHttpResponseMetrics(response: HttpClientResponseRef,
                                 endpoint: Opt[string],
