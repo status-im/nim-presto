@@ -157,6 +157,26 @@ proc new*(t: typedesc[RestClientRef],
                    flags: flags))
 
 proc new*(t: typedesc[RestClientRef],
+          address: HttpAddress,
+          flags: RestClientFlags = {},
+          httpFlags: HttpClientFlags = {},
+          maxConnections: int = -1,
+          maxRedirections: int = HttpMaxRedirections,
+          connectTimeout = HttpConnectTimeout,
+          headersTimeout = HttpHeadersTimeout,
+          idleTimeout = HttpConnectionIdleTimeout,
+          idlePeriod = HttpConnectionCheckPeriod,
+          bufferSize: int = 4096,
+          userAgent = PrestoIdent,
+          socketFlags: set[SocketFlags] = {}
+         ): RestResult[RestClientRef] =
+  let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
+                                   headersTimeout, bufferSize, maxConnections,
+                                   idleTimeout, idlePeriod, socketFlags)
+  ok(RestClientRef(session: session, address: address, agent: userAgent,
+                   flags: flags))
+
+proc new*(t: typedesc[RestClientRef],
           ta: TransportAddress,
           scheme: HttpClientScheme = HttpClientScheme.NonSecure,
           flags: RestClientFlags = {},
