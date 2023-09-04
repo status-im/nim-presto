@@ -169,12 +169,12 @@ proc new*(t: typedesc[RestClientRef],
           bufferSize: int = 4096,
           userAgent = PrestoIdent,
           socketFlags: set[SocketFlags] = {}
-         ): RestResult[RestClientRef] =
+         ): RestClientRef =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
                                    idleTimeout, idlePeriod, socketFlags)
-  ok(RestClientRef(session: session, address: address, agent: userAgent,
-                   flags: flags))
+  RestClientRef(session: session, address: address, agent: userAgent,
+                flags: flags)
 
 proc new*(t: typedesc[RestClientRef],
           ta: TransportAddress,
