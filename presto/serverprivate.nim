@@ -69,7 +69,7 @@ when defined(metrics):
         endpoint = $route.routePath
         icode = toInt(code)
         scode = Base10.toString(uint64(toInt(code)))
-      presto_client_response_status_count.inc(1, @[endpoint, scode])
+      presto_server_response_status_count.inc(1, @[endpoint, scode])
 
   proc processStatusMetrics(route: RestRoute, code: HttpCode,
                             duration: Duration) =
