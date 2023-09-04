@@ -7,10 +7,24 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import std/[options, strutils]
-import chronos
-import chronicles
-import stew/results
+import chronos, chronicles, stew/[base10, results]
 import route, common, segpath, servercommon
+
+when defined(metrics):
+  import metrics
+
+  declareGauge presto_server_response_status_count,
+               "Number of HTTP server responses with specific status",
+               labels = ["endpoint", "status"]
+  declareGauge presto_server_processed_request_count,
+               "Number of HTTP(s) processed requests"
+  declareGauge presto_server_missing_requests_count,
+               "Number of HTTP(s) requests to unrecognized API endpoints"
+  declareGauge presto_server_invalid_requests_count,
+               "Number of HTTP(s) requests invalid API endpoints"
+  declareGauge presto_server_prepare_response_time,
+               "Time taken to prepare response",
+               labels = ["endpoint"]
 
 proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
      async.} =
@@ -48,6 +62,30 @@ proc mergeHttpHeaders(a: var HttpTable, b: HttpTable) =
       for item in items:
         a.add(key, item)
 
+when defined(metrics):
+  proc processStatusMetrics(route: RestRoute, code: HttpCode) =
+    if RestServerMetricsType.Status in route.metrics:
+      let
+        endpoint = $route.routePath
+        icode = toInt(code)
+        scode = Base10.toString(uint64(toInt(code)))
+      presto_client_response_status_count.inc(1, @[endpoint, scode])
+
+  proc processStatusMetrics(route: RestRoute, code: HttpCode,
+                            duration: Duration) =
+    if RestServerMetricsType.Status in route.metrics:
+      processStatusMetrics(route, code)
+    if RestServerMetricsType.Response in route.metrics:
+      let endpoint = $route.routePath
+      presto_server_prepare_response_time.set(duration.milliseconds(),
+                                              @[endpoint])
+
+  proc processMetrics(route: RestRoute, duration: Duration) =
+    if RestServerMetricsType.Response in route.metrics:
+      let endpoint = $route.routePath
+      presto_server_prepare_response_time.set(duration.milliseconds(),
+                                              @[endpoint])
+
 proc processRestRequest*[T](server: T,
                             rf: RequestFence): Future[HttpResponseRef] {.
      gcsafe, async.} =
@@ -59,9 +97,13 @@ proc processRestRequest*[T](server: T,
             meth = $request.meth, uri = $request.uri
       let rres = server.router.getRoute(sres.get())
       if rres.isSome():
-        let route = rres.get()
-        let pathParams = route.getParamsTable()
-        let queryParams = request.query
+        let
+          route = rres.get()
+          pathParams = route.getParamsTable()
+          queryParams = request.query
+
+        when defined(metrics):
+          presto_server_processed_request_count.inc()
 
         let optBody =
           if RestRouterFlag.Raw notin route.flags:
@@ -71,17 +113,29 @@ proc processRestRequest*[T](server: T,
               debug "Unable to obtain request body", uri = $request.uri,
                     peer = $request.remoteAddress(), meth = $request.meth,
                     error_msg = $exc.msg
+
+              when defined(metrics):
+                processStatusMetrics(route, Http400)
+
               return await request.respond(Http400)
             except RestBadRequestError as exc:
               debug "Request has incorrect content type", uri = $request.uri,
                      peer = $request.remoteAddress(), meth = $request.meth,
                      error_msg = $exc.msg
+
+              when defined(metrics):
+                processStatusMetrics(route, Http400)
+
               return await request.respond(Http400)
             except CatchableError as exc:
               warn "Unexpected exception while getting request body",
                     uri = $request.uri, peer = $request.remoteAddress(),
                     meth = $request.meth, error_name = $exc.name,
                     error_msg = $exc.msg
+
+              when defined(metrics):
+                processStatusMetrics(route, Http400)
+
               return await request.respond(Http400)
           else:
             none[ContentBody]()
@@ -91,23 +145,42 @@ proc processRestRequest*[T](server: T,
               path_params = pathParams, query_params = queryParams,
               content_body = optBody
 
-        let restRes =
-          try:
-            await route.callback(request, pathParams, queryParams, optBody)
-          except HttpCriticalError as exc:
-            debug "Critical error occurred while processing a request",
-                  meth = $request.meth, peer = $request.remoteAddress(),
-                  uri = $request.uri, code = exc.code,
-                  path_params = pathParams, query_params = queryParams,
-                  content_body = optBody, error_msg = $exc.msg
-            return await request.respond(exc.code)
-          except CatchableError as exc:
-            warn "Unexpected error occured while processing a request",
-                  meth = $request.meth, peer = $request.remoteAddress(),
-                  uri = $request.uri, path_params = pathParams,
-                  query_params = queryParams, content_body = optBody,
-                  error_msg = $exc.msg, error_name = $exc.name
-            return await request.respond(Http503)
+        let
+          responseStart = Moment.now()
+          restRes =
+            try:
+              let res = await route.callback(request, pathParams, queryParams,
+                                             optBody)
+
+              when defined(metrics):
+                processMetrics(route, Moment.now() - responseStart)
+
+              res
+
+            except HttpCriticalError as exc:
+              debug "Critical error occurred while processing a request",
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri, code = exc.code,
+                    path_params = pathParams, query_params = queryParams,
+                    content_body = optBody, error_msg = $exc.msg
+
+              when defined(metrics):
+                processStatusMetrics(route, exc.code,
+                                     Moment.now() - responseStart)
+
+              return await request.respond(exc.code)
+            except CatchableError as exc:
+              warn "Unexpected error occured while processing a request",
+                    meth = $request.meth, peer = $request.remoteAddress(),
+                    uri = $request.uri, path_params = pathParams,
+                    query_params = queryParams, content_body = optBody,
+                    error_msg = $exc.msg, error_name = $exc.name
+
+              when defined(metrics):
+                processStatusMetrics(route, Http503,
+                                     Moment.now() - responseStart)
+
+              return await request.respond(Http503)
 
         try:
           if not(request.responded()):
@@ -116,6 +189,10 @@ proc processRestRequest*[T](server: T,
               debug "Received empty response from handler",
                       meth = $request.meth, peer = $request.remoteAddress(),
                       uri = $request.uri
+
+              when defined(metrics):
+                processStatusMetrics(route, Http400)
+
               return await request.respond(Http410)
             of RestApiResponseKind.Status:
               var headers = HttpTable.init()
@@ -132,6 +209,10 @@ proc processRestRequest*[T](server: T,
                     headers.add("Vary", "Origin")
                     headers.add("Access-Control-Allow-Origin", origin[0])
                 elif origin.len > 1:
+
+                  when defined(metrics):
+                    processStatusMetrics(route, Http400)
+
                   return await request.respond(Http400,
                     "Only a single Origin header must be specified")
 
@@ -141,6 +222,10 @@ proc processRestRequest*[T](server: T,
                     uri = $request.uri
 
               headers.mergeHttpHeaders(restRes.headers)
+
+              when defined(metrics):
+                processStatusMetrics(route, restRes.status)
+
               return await request.respond(restRes.status, "", headers)
             of RestApiResponseKind.Content:
               var headers = HttpTable.init([("Content-Type",
@@ -158,6 +243,10 @@ proc processRestRequest*[T](server: T,
                     headers.add("Vary", "Origin")
                     headers.add("Access-Control-Allow-Origin", origin[0])
                 elif origin.len > 1:
+
+                  when defined(metrics):
+                    processStatusMetrics(route, Http400)
+
                   return await request.respond(Http400,
                     "Only a single Origin header must be specified")
 
@@ -169,6 +258,10 @@ proc processRestRequest*[T](server: T,
                     content_size = len(restRes.content.data)
 
               headers.mergeHttpHeaders(restRes.headers)
+
+              when defined(metrics):
+                processStatusMetrics(route, restRes.status)
+
               return await request.respond(restRes.status,
                                            restRes.content.data, headers)
             of RestApiResponseKind.Error:
@@ -181,6 +274,10 @@ proc processRestRequest*[T](server: T,
                                             error.contentType)])
 
               headers.mergeHttpHeaders(restRes.headers)
+
+              when defined(metrics):
+                processStatusMetrics(route, error.status)
+
               return await request.respond(error.status, error.message,
                                            headers)
             of RestApiResponseKind.Redirect:
@@ -197,6 +294,10 @@ proc processRestRequest*[T](server: T,
                     else:
                       uri.query = uri.query & "&" & request.uri.query
                   $uri
+
+              when defined(metrics):
+                processStatusMetrics(route, restRes.status)
+
               return await request.redirect(restRes.status, location,
                                             restRes.headers)
           else:
@@ -219,10 +320,18 @@ proc processRestRequest*[T](server: T,
       else:
         debug "Request is not part of API", peer = $request.remoteAddress(),
               meth = $request.meth, uri = $request.uri
+
+        when defined(metrics):
+          presto_server_missing_requests_count.inc()
+
         return await request.respond(Http404, "", HttpTable.init())
     else:
       debug "Received invalid request", peer = $request.remoteAddress(),
             meth = $request.meth, uri = $request.uri
+
+      when defined(metrics):
+        presto_server_invalid_requests_count.inc()
+
       return await request.respond(Http400, "", HttpTable.init())
   else:
     let httpErr = rf.error()

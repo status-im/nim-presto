@@ -14,6 +14,22 @@ import segpath, common, macrocommon, agent
 export httpclient, httptable, httpcommon, options, agent, httputils
 export SocketFlags
 
+when defined(metrics):
+  import metrics
+
+  declareGauge presto_client_response_status_count,
+               "Number of received client responses with specific status",
+               labels = ["endpoint", "status"]
+  declareGauge presto_client_connect_time,
+               "Time taken to establish connection with remote host",
+               labels = ["endpoint"]
+  declareGauge presto_client_request_time,
+               "Time taken to send request to remote host",
+               labels = ["endpoint"]
+  declareGauge presto_client_response_time,
+               "Time taken to receive response from remote host",
+               labels = ["endpoint"]
+
 type
   RestClient* = object of RootObj
     session*: HttpSessionRef
@@ -54,10 +70,21 @@ type
 
   RestConnectionFlags* = set[RestConnectionFlag]
 
+  RestClientMetricsType* {.pure.} = enum
+    ConnectTime,
+    RequestTime,
+    ResponseTime,
+    Status
+
+  RestClientMetricsTypes* = set[RestClientMetricsType]
+
 template endpoint*(v: string) {.pragma.}
 template meth*(v: HttpMethod) {.pragma.}
 template accept*(v: string) {.pragma.}
 template connection*(v: RestConnectionFlag) {.pragma.}
+template metrics*() {.pragma.}
+template metrics*(v: string) {.pragma.}
+template metricsTypes*(v: RestClientMetricsTypes) {.pragma.}
 
 const
   DefaultAcceptContentType = "application/json"
@@ -67,6 +94,12 @@ const
   ExtraHeadersArg = "extraHeaders"
   NotAllowedArgumentNames = [RestClientArg, RestContentTypeArg,
                              RestAcceptTypeArg]
+  RestClientMetricsAllTypes* = {
+    RestClientMetricsType.ConnectTime,
+    RestClientMetricsType.RequestTime,
+    RestClientMetricsType.ResponseTime,
+    RestClientMetricsType.Status
+  }
 
 chronicles.expandIt(HttpAddress):
   remote = it.hostname & ":" & Base10.toString(it.port)
@@ -238,13 +271,44 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
     if node.kind == nnkIdent and node.strVal == "async":
       return node
 
+proc getMetricsPragmaOrDefault(prc: NimNode,
+                               default: string): NimNode {.compileTime.} =
+  let pragmaNode = prc.pragma()
+  for node in pragmaNode.items():
+    if node.kind == nnkExprColonExpr:
+      if (node[0].kind == nnkIdent) and (node[0].strVal == "metrics"):
+        case node[1].kind
+        of nnkStrLit:
+          if len(node[1].strVal) > 0:
+            return newCall(newDotExpr(newIdentNode("Opt"),
+                                      newIdentNode("some")),
+                           copyNimTree(node[1]))
+          error("REST procedure should have non-empty {.metrics.} pragma",
+                node[1])
+        else:
+          return newCall(newDotExpr(newIdentNode("Opt"), newIdentNode("some")),
+                         copyNimTree(node[1]))
+    elif (node.kind == nnkIdent) and (node.strVal == "metrics"):
+      return newCall(newDotExpr(newIdentNode("Opt"), newIdentNode("some")),
+                     newLit(default))
+  newCall(newDotExpr(newIdentNode("Opt"), newIdentNode("none")),
+          newIdentNode("string"))
+
+proc getMetricsTypePragmas(prc: NimNode): NimNode {.compileTime.} =
+  let pragmaNode = prc.pragma()
+  for node in pragmaNode.items():
+    if node.kind == nnkExprColonExpr:
+      if (node[0].kind == nnkIdent) and (node[0].strVal == "metricsTypes"):
+        return copyNimTree(node[1])
+  newIdentNode("RestClientMetricsAllTypes")
+
 proc getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
       if node[0].kind == nnkIdent and node[0].strVal == "connection":
         return copyNimTree(node[1])
-  return newTree(nnkCurly)
+  newTree(nnkCurly)
 
 proc raiseRestEncodingStringError*(field: static string) {.
      noreturn, noinline.} =
@@ -393,14 +457,16 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
           case item.kind
           of nnkIdent:
             case item.strVal().toLowerAscii()
-            of "rest", "async", "endpoint", "meth", "accept", "connection":
+            of "rest", "async", "endpoint", "meth", "accept", "connection",
+                "metrics", "metricstypes":
               false
             else:
               true
           of nnkExprColonExpr:
             item[0].expectKind(nnkIdent)
             case item[0].strVal().toLowerAscii()
-            of "endpoint", "meth", "accept", "connection":
+            of "endpoint", "meth", "accept", "connection", "metrics",
+               "metricstypes":
               false
             else:
               true
@@ -451,9 +517,27 @@ template closeObjects(o1, o2, o3, o4: untyped): untyped =
     await o4.closeWait()
     o4 = nil
 
+when defined(metrics):
+  proc processStatusMetrics(ep: string, status: int) =
+    let sts = Base10.toString(uint64(status))
+    presto_client_response_status_count.inc(1, @[ep, sts])
+
+proc processHttpResponseMetrics(response: HttpClientResponseRef,
+                                endpoint: Opt[string],
+                                metricsTypes: RestClientMetricsTypes) =
+  when defined(metrics):
+    if endpoint.isSome():
+      # We could not update time metrics for this response, because response
+      # will be received later.
+      let ep = endpoint.get()
+      if RestClientMetricsType.Status in metricsTypes:
+        processStatusMetrics(ep, response.status)
+
 proc processRestResponse(
        response: HttpClientResponseRef,
-       flags: set[RestRequestFlag]
+       flags: set[RestRequestFlag],
+       endpoint: Opt[string],
+       metricsTypes: RestClientMetricsTypes
      ): Future[RestPlainResponse] {.async.} =
   let address = response.address
   try:
@@ -472,6 +556,17 @@ proc processRestResponse(
                 await response.getBodyBytes()
         debug "Received REST response body from remote server",
               address, contentType = $contentType, size = len(data)
+
+        when defined(metrics):
+          if endpoint.isSome():
+            let ep = endpoint.get()
+            if RestClientMetricsType.ResponseTime in metricsTypes:
+              let duration = response.duration
+              presto_client_response_time.set(
+                float64(duration.milliseconds()), @[ep])
+            if RestClientMetricsType.Status in metricsTypes:
+              processStatusMetrics(ep, response.status)
+
         await response.closeWait()
         RestPlainResponse(status: status, contentType: contentType,
                           headers: response.headers, data: data)
@@ -496,7 +591,9 @@ proc processRestResponse(
     raise(exc)
 
 proc requestWithoutBody*(
-       req: HttpClientRequestRef
+       req: HttpClientRequestRef,
+       endpoint: Opt[string],
+       metricsTypes: RestClientMetricsTypes
      ): Future[HttpClientResponseRef] {.async.} =
   var
     request = req
@@ -508,6 +605,19 @@ proc requestWithoutBody*(
       debug "Sending REST request to remote server", address,
             http_method = $request.meth
       response = await request.send()
+
+      when defined(metrics):
+        if endpoint.isSome():
+          let ep = endpoint.get()
+          if RestClientMetricsType.ConnectTime in metricsTypes:
+            let duration = request.connection.duration
+            presto_client_connect_time.set(
+              float64(duration.milliseconds()), @[ep])
+          if RestClientMetricsType.RequestTime in metricsTypes:
+            let duration = request.duration
+            presto_client_request_time.set(
+              float64(duration.milliseconds()), @[ep])
+
       debug "Got REST response headers from remote server", address,
             status = response.status, http_method = $request.meth
       if response.status >= 300 and response.status < 400:
@@ -560,7 +670,9 @@ proc requestWithBody*(
        req: HttpClientRequestRef,
        pbytes: pointer,
        nbytes: uint64,
-       chunkSize: int
+       chunkSize: int,
+       endpoint: Opt[string],
+       metricsTypes: RestClientMetricsTypes
      ): Future[HttpClientResponseRef] {.async.} =
   doAssert(chunkSize > 0 and chunkSize <= high(int))
   var
@@ -577,6 +689,15 @@ proc requestWithBody*(
             http_method = $request.meth
       # Sending HTTP request headers and obtain HTTP request body writer
       writer = await request.open()
+
+      when defined(metrics):
+        if endpoint.isSome():
+          let ep = endpoint.get()
+          if RestClientMetricsType.ConnectTime in metricsTypes:
+            let duration = request.connection.duration
+            presto_client_connect_time.set(
+              float64(duration.milliseconds()), @[ep])
+
       debug "Opened connection to remote server", address,
             http_method = $request.meth
       # Sending HTTP request body
@@ -593,6 +714,15 @@ proc requestWithBody*(
       writer = nil
       # Waiting for response headers
       response = await request.finish()
+
+      when defined(metrics):
+        if endpoint.isSome():
+          let ep = endpoint.get()
+          if RestClientMetricsType.RequestTime in metricsTypes:
+            let duration = request.duration
+            presto_client_request_time.set(
+              float64(duration.milliseconds()), @[ep])
+
       debug "Got REST response headers from remote server", address,
             status = response.status, http_method = $request.meth
       if response.status >= 300 and response.status < 400:
@@ -711,6 +841,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   let
     connectionFlagsValue = prc.getConnectionPragma()
     endpointValue = prc.getEndpointOrDefault("")
+    optMetricsEndpoint = prc.getMetricsPragmaOrDefault(endpointValue)
+    metricsTypesValue = prc.getMetricsTypePragmas()
     acceptValue = prc.getAcceptOrDefault(DefaultAcceptContentType)
     methodValue = prc.getMethodOrDefault(newDotExpr(ident("HttpMethod"),
                                          ident("MethodGet")))
@@ -913,7 +1045,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
           )
           await requestWithBody(`requestIdent`,
                                 cast[pointer](unsafeAddr `bodyIdent`[0]),
-                                uint64(len(`bodyIdent`)), chunkSize)
+                                uint64(len(`bodyIdent`)), chunkSize,
+                                `optMetricsEndpoint`, `metricsTypesValue`)
   else:
     statements.add quote do:
       let `responseObjectIdent` =
@@ -923,26 +1056,30 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
             `contentTypeIdent`, `acceptTypeIdent`,
             `extraHeadersIdent`, `methodValue`, `connectionFlagsValue`
           )
-          await requestWithoutBody(`requestIdent`)
+          await requestWithoutBody(`requestIdent`,
+                                   `optMetricsEndpoint`, `metricsTypesValue`)
 
   case returnKind
   of RestReturnKind.Status:
     # Result will contain only HTTP status.
     statements.add quote do:
-      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
-                                                          `requestFlagsIdent`)
+      let `responseDataIdent` = await processRestResponse(
+        `responseObjectIdent`, `requestFlagsIdent`, `optMetricsEndpoint`,
+        `metricsTypesValue`)
       return RestStatus(`responseDataIdent`.status)
   of RestReturnKind.PlainResponse:
     # Result will contain HTTP status, HTTP content-type and sequence of bytes.
     statements.add quote do:
-      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
-                                                          `requestFlagsIdent`)
+      let `responseDataIdent` = await processRestResponse(
+        `responseObjectIdent`, `requestFlagsIdent`, `optMetricsEndpoint`,
+        `metricsTypesValue`)
       return `responseDataIdent`
   of RestReturnKind.GenericResponse:
     # Result will contain HTTP status, HTTP content-type and decoded value.
     statements.add quote do:
-      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
-                                                          `requestFlagsIdent`)
+      let `responseDataIdent` = await processRestResponse(
+        `responseObjectIdent`, `requestFlagsIdent`, `optMetricsEndpoint`,
+        `metricsTypesValue`)
       let `responseResultIdent` =
         block:
           let res = decodeBytes(`returnType`, `responseDataIdent`.data,
@@ -959,8 +1096,9 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
     # Result will be only decoded value, if HTTP status is not in [200, 299]
     # exception `RestResponseError` will be raised.
     statements.add quote do:
-      let `responseDataIdent` = await processRestResponse(`responseObjectIdent`,
-                                                          `requestFlagsIdent`)
+      let `responseDataIdent` = await processRestResponse(
+        `responseObjectIdent`, `requestFlagsIdent`, `optMetricsEndpoint`,
+        `metricsTypesValue`)
       if `responseDataIdent`.status < 200 or
          `responseDataIdent`.status >= 300:
         raiseRestResponseError(`responseDataIdent`)
@@ -974,6 +1112,8 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       return `responseResultIdent`
   of RestReturnKind.HttpResponse:
     statements.add quote do:
+      processHttpResponseMetrics(`responseObjectIdent`, `optMetricsEndpoint`,
+                                 `metricsTypesValue`)
       return RestHttpResponseRef(`responseObjectIdent`)
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
