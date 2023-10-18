@@ -7,6 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import std/options
+import chronos, chronos/apps/http/httpserver
 import chronicles
 import common
 export chronicles, options
@@ -33,3 +34,10 @@ chronicles.expandIt(RestApiError):
 type
   RestServerState* {.pure.} = enum
     Closed, Stopped, Running
+
+  RestRequestError* {.pure.} = enum
+    Invalid, NotFound, InvalidContentBody, InvalidContentType, Unexpected
+
+  RestRequestErrorHandler* = proc(
+    error: RestRequestError,
+    request: HttpRequestRef): Future[HttpResponseRef] {.async.}

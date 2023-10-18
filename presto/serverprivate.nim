@@ -30,18 +30,16 @@ proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
      async.} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
-  else:
-    if r.hasBody() and r.contentLength > 0:
-      if r.contentTypeData.isNone():
-        raise newException(RestBadRequestError,
-                           "Incorrect/missing Content-Type header")
-      let
-        data = await r.getBody()
-        cbody = ContentBody(contentType: r.contentTypeData.get(),
-                            data: data)
-      return some[ContentBody](cbody)
-    else:
-      return none[ContentBody]()
+  if not(r.hasBody()):
+    return none[ContentBody]()
+  if (HttpRequestFlags.BoundBody in r.requestFlags) and (r.contentLength == 0):
+    return none[ContentBody]()
+  if r.contentTypeData.isNone():
+    raise newException(RestBadRequestError,
+                       "Incorrect/missing Content-Type header")
+  let data = await r.getBody()
+  return some[ContentBody](
+    ContentBody(contentType: r.contentTypeData.get(), data: data))
 
 proc originsMatch(requestOrigin, allowedOrigin: string): bool =
   if allowedOrigin.startsWith("http://") or
@@ -67,7 +65,6 @@ when defined(metrics):
     if RestServerMetricsType.Status in route.metrics:
       let
         endpoint = $route.routePath
-        icode = toInt(code)
         scode = Base10.toString(uint64(toInt(code)))
       presto_server_response_status_count.inc(1, @[endpoint, scode])
 
@@ -117,7 +114,12 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, Http400)
 
-              return await request.respond(Http400)
+              return
+                if isNil(server.errorHandler):
+                  await request.respond(Http400)
+                else:
+                  await server.errorHandler(
+                    RestRequestError.InvalidContentBody, request)
             except RestBadRequestError as exc:
               debug "Request has incorrect content type", uri = $request.uri,
                      peer = $request.remoteAddress(), meth = $request.meth,
@@ -126,7 +128,12 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, Http400)
 
-              return await request.respond(Http400)
+              return
+                if isNil(server.errorHandler):
+                  await request.respond(Http400)
+                else:
+                  await server.errorHandler(
+                    RestRequestError.InvalidContentType, request)
             except CatchableError as exc:
               warn "Unexpected exception while getting request body",
                     uri = $request.uri, peer = $request.remoteAddress(),
@@ -136,7 +143,12 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, Http400)
 
-              return await request.respond(Http400)
+              return
+                if isNil(server.errorHandler):
+                  await request.respond(Http400)
+                else:
+                  await server.errorHandler(
+                    RestRequestError.Unexpected, request)
           else:
             none[ContentBody]()
 
@@ -324,7 +336,11 @@ proc processRestRequest*[T](server: T,
         when defined(metrics):
           presto_server_missing_requests_count.inc()
 
-        return await request.respond(Http404, "", HttpTable.init())
+        return
+          if isNil(server.errorHandler):
+            await request.respond(Http404, "", HttpTable.init())
+          else:
+            await server.errorHandler(RestRequestError.NotFound, request)
     else:
       debug "Received invalid request", peer = $request.remoteAddress(),
             meth = $request.meth, uri = $request.uri
@@ -332,7 +348,11 @@ proc processRestRequest*[T](server: T,
       when defined(metrics):
         presto_server_invalid_requests_count.inc()
 
-      return await request.respond(Http400, "", HttpTable.init())
+      return
+        if isNil(server.errorHandler):
+          await request.respond(Http400, "", HttpTable.init())
+        else:
+          await server.errorHandler(RestRequestError.Invalid, request)
   else:
     let httpErr = rf.error()
     if httpErr.error == HttpServerError.DisconnectError:
