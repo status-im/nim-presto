@@ -17,6 +17,7 @@ type
   SecureRestServer* = object of RootObj
     server*: SecureHttpServerRef
     router*: RestRouter
+    errorHandler*: RestRequestErrorHandler
 
   SecureRestServerRef* = ref SecureRestServer
 
@@ -35,9 +36,13 @@ proc new*(t: typedesc[SecureRestServerRef],
           bufferSize: int = 4096,
           httpHeadersTimeout = 10.seconds,
           maxHeadersSize: int = 8192,
-          maxRequestBodySize: int = 1_048_576
+          maxRequestBodySize: int = 1_048_576,
+          requestErrorHandler: RestRequestErrorHandler = nil
          ): RestResult[SecureRestServerRef] =
-  var server = SecureRestServerRef(router: router)
+  var server = SecureRestServerRef(
+    router: router,
+    errorHandler: requestErrorHandler
+  )
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
     processRestRequest(server, rf)

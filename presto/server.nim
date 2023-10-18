@@ -17,6 +17,7 @@ type
   RestServer* = object of RootObj
     server*: HttpServerRef
     router*: RestRouter
+    errorHandler*: RestRequestErrorHandler
 
   RestServerRef* = ref RestServer
 
@@ -32,8 +33,10 @@ proc new*(t: typedesc[RestServerRef],
           bufferSize: int = 4096,
           httpHeadersTimeout = 10.seconds,
           maxHeadersSize: int = 8192,
-          maxRequestBodySize: int = 1_048_576): RestResult[RestServerRef] =
-  var server = RestServerRef(router: router)
+          maxRequestBodySize: int = 1_048_576,
+          requestErrorHandler: RestRequestErrorHandler = nil
+          ): RestResult[RestServerRef] =
+  var server = RestServerRef(router: router, errorHandler: requestErrorHandler)
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
     processRestRequest[RestServerRef](server, rf)

@@ -61,10 +61,13 @@ proc init(t: typedesc[ClientResponse], status: int, data: string,
 
 proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
                 body: string, ctype = "",
-                accept = ""): Future[ClientResponse] {.async.} =
+                accept = "", length = -1): Future[ClientResponse] {.async.} =
   var request = $meth & " " & $parseUri(url) & " HTTP/1.1\r\n"
   request.add("Host: " & $server & "\r\n")
-  request.add("Content-Length: " & $len(body) & "\r\n")
+  if length >= 0:
+    request.add("Content-Length: " & $length & "\r\n")
+  else:
+    request.add("Content-Length: " & $len(body) & "\r\n")
   if len(ctype) > 0:
     request.add("Content-Type: " & ctype & "\r\n")
   if len(accept) > 0:
@@ -932,6 +935,64 @@ suite "REST API server test suite":
     router.rawMetricsApi(MethodGet, "/test/get/10",
                          RestServerMetrics) do () -> RestApiResponse:
       return RestApiResponse.response("ok-10", Http200, "test/test")
+
+  asyncTest "Custom error handlers test":
+    const
+      InvalidRequest = "////////////////////////////////////////////////////////////////////test"
+
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test") do () -> RestApiResponse:
+      return RestApiResponse.response("test", Http200)
+    router.api(MethodPost, "/post") do () -> RestApiResponse:
+      return RestApiResponse.response("post", Http200)
+
+    proc processError(
+      kind: RestRequestError,
+      request: HttpRequestRef
+    ): Future[HttpResponseRef] {.async.} =
+      case kind
+      of RestRequestError.Invalid:
+        return await request.respond(Http201, "INVALID", HttpTable.init())
+      of RestRequestError.NotFound:
+        return await request.respond(Http202, "NOT FOUND", HttpTable.init())
+      of RestRequestError.InvalidContentBody:
+        # This type of error is tough to emulate for test, its only possible
+        # with chunked encoding with incorrect encoding headers.
+        return defaultResponse()
+      of RestRequestError.InvalidContentType:
+        return await request.respond(Http203, "CONTENT TYPE", HttpTable.init())
+      of RestRequestError.Unexpected:
+        # This type of error should not be happened at all
+        return defaultResponse()
+
+    var sres = RestServerRef.new(router, serverAddress,
+                                 requestErrorHandler = processError)
+    let server = sres.get()
+    server.start()
+    let address = server.server.instance.localAddress()
+
+    block:
+      let res = await httpClient(address, MethodGet, InvalidRequest, "")
+      check:
+        res.status == 201
+        res.data == "INVALID"
+    block:
+      let res1 = await httpClient(address, MethodPost, "/test", "")
+      let res2 = await httpClient(address, MethodGet, "/tes", "")
+      check:
+        res1.status == 202
+        res2.status == 202
+        res1.data == "NOT FOUND"
+        res2.data == "NOT FOUND"
+    block:
+      # Missing `Content-Type` header for requests which has body.
+      let res = await httpClient(address, MethodPost, "/post", "data")
+      check:
+        res.status == 203
+        res.data == "CONTENT TYPE"
+
+    await server.stop()
+    await server.closeWait()
 
   test "Leaks test":
     checkLeaks()
