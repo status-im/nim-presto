@@ -59,7 +59,7 @@ proc new*(t: typedesc[SecureRestServerRef],
   else:
     err("Could not create HTTPS server instance")
 
-proc state*(rs: SecureRestServerRef): RestServerState {.raises: [Defect].} =
+proc state*(rs: SecureRestServerRef): RestServerState {.raises: [].} =
   ## Returns current REST server's state.
   case rs.server.state
   of HttpServerState.ServerClosed:
