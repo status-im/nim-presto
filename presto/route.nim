@@ -23,7 +23,7 @@ type
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
          body: Option[ContentBody]): Future[RestApiResponse] {.
-      raises: [Defect], gcsafe.}
+      raises: [], gcsafe.}
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
@@ -57,7 +57,7 @@ type
 
 proc init*(t: typedesc[RestRouter],
            patternCallback: PatternCallback,
-           allowedOrigin = none(string)): RestRouter {.raises: [Defect].} =
+           allowedOrigin = none(string)): RestRouter {.raises: [].} =
   doAssert(not(isNil(patternCallback)),
            "Pattern validation callback must not be nil")
   RestRouter(patternCallback: patternCallback,
@@ -75,7 +75,7 @@ proc optionsRequestHandler(
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
                handler: RestApiCallback) {.
-     raises: [Defect].} =
+     raises: [].} =
   let spath = SegmentedPath.init(request, path, rr.patternCallback)
   let route = rr.routes.getOrDefault(spath,
                                      RestRouteItem(kind: RestRouteKind.None))
@@ -108,16 +108,16 @@ proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
     raiseAssert("The route is already in the routing table")
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback) {.raises: [Defect].} =
+               handler: RestApiCallback) {.raises: [].} =
   addRoute(rr, request, path, {}, {}, handler)
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
                flags: set[RestRouterFlag],
-               handler: RestApiCallback) {.raises: [Defect].} =
+               handler: RestApiCallback) {.raises: [].} =
   addRoute(rr, request, path, flags, {}, handler)
 
 proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
-                  dstPath: string) {.raises: [Defect].} =
+                  dstPath: string) {.raises: [].} =
   let spath = SegmentedPath.init(request, srcPath, rr.patternCallback)
   let dpath = SegmentedPath.init(request, dstPath, rr.patternCallback)
   let route = rr.routes.getOrDefault(spath,
@@ -131,7 +131,7 @@ proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
     raiseAssert("The route is already in the routing table")
 
 proc getRoute*(rr: RestRouter,
-               spath: SegmentedPath): Option[RestRoute] {.raises: [Defect].} =
+               spath: SegmentedPath): Option[RestRoute] {.raises: [].} =
   var path = spath
   while true:
     let route = rr.routes.getOrDefault(path,
@@ -149,7 +149,7 @@ proc getRoute*(rr: RestRouter,
       # Route redirection was found, so we perform path transformation
       path = rewritePath(route.path, route.redirectPath, path)
 
-iterator params*(route: RestRoute): string {.raises: [Defect].} =
+iterator params*(route: RestRoute): string {.raises: [].} =
   var pats = route.routePath.patterns
   while pats != 0'u64:
     let index = firstOne(pats) - 1
@@ -159,7 +159,7 @@ iterator params*(route: RestRoute): string {.raises: [Defect].} =
     pats = pats and not(1'u64 shl index)
 
 iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
-  raises: [Defect].} =
+  raises: [].} =
   var pats = route.routePath.patterns
   while pats != 0'u64:
     let index = firstOne(pats) - 1
@@ -169,13 +169,13 @@ iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
     yield (key, route.requestPath.data[index])
     pats = pats and not(1'u64 shl index)
 
-proc getParamsTable*(route: RestRoute): HttpTable {.raises: [Defect].} =
+proc getParamsTable*(route: RestRoute): HttpTable {.raises: [].} =
   var res = HttpTable.init()
   for key, value in route.pairs():
     res.add(key, value)
   res
 
-proc getParamsList*(route: RestRoute): seq[string] {.raises: [Defect].} =
+proc getParamsList*(route: RestRoute): seq[string] {.raises: [].} =
   var res: seq[string]
   for item in route.params():
     res.add(item)
@@ -383,7 +383,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
                   `queryParams`: HttpTable,
                   `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
-         raises: [Defect], async.} =
+         async.} =
       template preferredContentType(
         t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
         `requestParam`.preferredContentType(t)

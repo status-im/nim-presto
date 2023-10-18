@@ -11,7 +11,7 @@ import stew/[results, byteutils], httputils
 
 export results, httputils, httptable
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   ContentBody* = object

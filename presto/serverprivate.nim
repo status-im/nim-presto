@@ -157,8 +157,9 @@ proc processRestRequest*[T](server: T,
               path_params = pathParams, query_params = queryParams,
               content_body = optBody
 
+        when defined(metrics):
+          let responseStart = Moment.now()
         let
-          responseStart = Moment.now()
           restRes =
             try:
               let res = await route.callback(request, pathParams, queryParams,

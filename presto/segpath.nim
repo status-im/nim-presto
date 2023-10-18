@@ -12,11 +12,11 @@ import chronos/apps
 import common
 export common, apps
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   PatternCallback* = proc(pattern: string,
-                          value: string): int {.gcsafe, raises: [Defect].}
+                          value: string): int {.gcsafe, raises: [].}
 
   SegmentedPath* = object
     data*: seq[string]
