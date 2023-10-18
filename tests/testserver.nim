@@ -61,17 +61,21 @@ proc init(t: typedesc[ClientResponse], status: int, data: string,
 
 proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
                 body: string, ctype = "",
-                accept = "", length = -1): Future[ClientResponse] {.async.} =
+                accept = "", encoding = "",
+                length = -1): Future[ClientResponse] {.async.} =
   var request = $meth & " " & $parseUri(url) & " HTTP/1.1\r\n"
   request.add("Host: " & $server & "\r\n")
-  if length >= 0:
-    request.add("Content-Length: " & $length & "\r\n")
-  else:
-    request.add("Content-Length: " & $len(body) & "\r\n")
+  if len(encoding) == 0:
+    if length >= 0:
+      request.add("Content-Length: " & $length & "\r\n")
+    else:
+      request.add("Content-Length: " & $len(body) & "\r\n")
   if len(ctype) > 0:
     request.add("Content-Type: " & ctype & "\r\n")
   if len(accept) > 0:
     request.add("Accept: " & accept & "\r\n")
+  if len(encoding) > 0:
+    request.add("Transfer-Encoding: " & encoding & "\r\n")
   request.add("\r\n")
 
   if len(body) > 0:
@@ -427,7 +431,7 @@ suite "REST API server test suite":
         ("/test/1/2/0xaa?opt1=1&opt2=2&opt3=0xbb&opt4=2&opt4=3&opt4=4&opt5=t&" &
          "opt5=e&opt5=s&opt5=t&opt6=0xCA&opt6=0xFE", "text/plain", "textbody"),
         ClientResponse.init(200,
-                         "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/plain,textbody")
+                        "1:2:aa:1:2:bb:2,3,4:t,e,s,t:ca,fe:text/plain,textbody")
       )
     ]
 
@@ -443,6 +447,18 @@ suite "REST API server test suite":
         if len(item[1].data) > 0:
           check res.data == item[1].data
 
+      block:
+        let res = await httpClient(serverAddress, MethodPost,
+                                   url = "/test/1/2/0xaa",
+                                   body = "4\r\nWiki\r\n5\r\npedia\r\nE\r\n " &
+                                     "in\r\n\r\nchunks.\r\n0\r\n\r\n",
+                                   ctype = "application/octet-stream",
+                                   accept = "*/*",
+                                   encoding = "chunked")
+        check:
+          res.status == 200
+          res.data == "1:2:aa:::::::application/octet-stream,Wikipedia " &
+                      "in\r\n\r\nchunks."
     finally:
       await server.closeWait()
 
@@ -958,9 +974,9 @@ suite "REST API server test suite":
       of RestRequestError.InvalidContentBody:
         # This type of error is tough to emulate for test, its only possible
         # with chunked encoding with incorrect encoding headers.
-        return defaultResponse()
+        return await request.respond(Http203, "CONTENT BODY", HttpTable.init())
       of RestRequestError.InvalidContentType:
-        return await request.respond(Http203, "CONTENT TYPE", HttpTable.init())
+        return await request.respond(Http204, "CONTENT TYPE", HttpTable.init())
       of RestRequestError.Unexpected:
         # This type of error should not be happened at all
         return defaultResponse()
@@ -985,10 +1001,18 @@ suite "REST API server test suite":
         res1.data == "NOT FOUND"
         res2.data == "NOT FOUND"
     block:
+      # Invalid content body
+      let res = await httpClient(address, MethodPost, "/post", "z\r\n1",
+                                 ctype = "application/octet-stream",
+                                 encoding = "chunked")
+      check:
+        res.status == 203
+        res.data == "CONTENT BODY"
+    block:
       # Missing `Content-Type` header for requests which has body.
       let res = await httpClient(address, MethodPost, "/post", "data")
       check:
-        res.status == 203
+        res.status == 204
         res.data == "CONTENT TYPE"
 
     await server.stop()

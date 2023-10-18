@@ -30,18 +30,16 @@ proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
      async.} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
-  else:
-    if r.hasBody() and r.contentLength > 0:
-      if r.contentTypeData.isNone():
-        raise newException(RestBadRequestError,
-                           "Incorrect/missing Content-Type header")
-      let
-        data = await r.getBody()
-        cbody = ContentBody(contentType: r.contentTypeData.get(),
-                            data: data)
-      return some[ContentBody](cbody)
-    else:
-      return none[ContentBody]()
+  if not(r.hasBody()):
+    return none[ContentBody]()
+  if (HttpRequestFlags.BoundBody in r.requestFlags) and (r.contentLength == 0):
+    return none[ContentBody]()
+  if r.contentTypeData.isNone():
+    raise newException(RestBadRequestError,
+                       "Incorrect/missing Content-Type header")
+  let data = await r.getBody()
+  return some[ContentBody](
+    ContentBody(contentType: r.contentTypeData.get(), data: data))
 
 proc originsMatch(requestOrigin, allowedOrigin: string): bool =
   if allowedOrigin.startsWith("http://") or
