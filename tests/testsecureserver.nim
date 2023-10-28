@@ -600,5 +600,42 @@ suite "Secure REST API server test suite":
     finally:
       await server.closeWait()
 
+  asyncTest "Server error types test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test") do () -> RestApiResponse:
+      return RestApiResponse.response("test", Http200)
+
+    let secureKey = TLSPrivateKey.init(RestSelfSignedRsaKey)
+    let secureCert = TLSCertificate.init(RestSelfSignedRsaCert)
+
+    block:
+      let sres = SecureRestServerRef.new(router, initTAddress("127.0.0.1:0"),
+                                         secureKey, secureCert)
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
+    block:
+      let sres = SecureRestServerRef.new(router, initTAddress("127.0.0.1:0"),
+                                         secureKey, secureCert,
+                                         errorType = cstring)
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
+    block:
+      let sres = SecureRestServerRef.new(router, initTAddress("127.0.0.1:0"),
+                                         secureKey, secureCert,
+                                         errorType = string)
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
   test "Leaks test":
     checkLeaks()

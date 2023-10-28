@@ -1018,5 +1018,36 @@ suite "REST API server test suite":
     await server.stop()
     await server.closeWait()
 
+  asyncTest "Server error types test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test") do () -> RestApiResponse:
+      return RestApiResponse.response("test", Http200)
+
+    block:
+      let sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"))
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
+    block:
+      let sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"),
+                                   errorType = cstring)
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
+    block:
+      let sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"),
+                                   errorType = string)
+      check sres.isOk()
+      let server = sres.get()
+      server.start()
+      await server.stop()
+      await server.closeWait()
+
   test "Leaks test":
     checkLeaks()
