@@ -37,8 +37,9 @@ proc new*(t: typedesc[SecureRestServerRef],
           httpHeadersTimeout = 10.seconds,
           maxHeadersSize: int = 8192,
           maxRequestBodySize: int = 1_048_576,
-          requestErrorHandler: RestRequestErrorHandler = nil
-         ): RestResult[SecureRestServerRef] =
+          requestErrorHandler: RestRequestErrorHandler = nil,
+          errorType: type = cstring
+         ): Result[SecureRestServerRef, errorType] =
   var server = SecureRestServerRef(
     router: router,
     errorHandler: requestErrorHandler
@@ -57,7 +58,18 @@ proc new*(t: typedesc[SecureRestServerRef],
     server.server = sres.get()
     ok(server)
   else:
-    err("Could not create HTTPS server instance")
+    when errorType is cstring:
+      error "REST service could not be started", address = address,
+            reason = sres.error
+      err("Could not create HTTP server instance")
+    elif errorType is string:
+      err(sres.error)
+    else:
+      {.fatal: "Error type is not supported".}
+
+proc localAddress*(rs: SecureRestServerRef): TransportAddress {.raises: [].} =
+  ## Returns `rs` bound local socket address.
+  rs.server.instance.localAddress()
 
 proc state*(rs: SecureRestServerRef): RestServerState {.raises: [].} =
   ## Returns current REST server's state.
@@ -72,12 +84,12 @@ proc state*(rs: SecureRestServerRef): RestServerState {.raises: [].} =
 proc start*(rs: SecureRestServerRef) =
   ## Starts REST server.
   rs.server.start()
-  notice "Secure REST service started", address = $rs.server.address
+  notice "Secure REST service started", address = $rs.localAddress()
 
 proc stop*(rs: SecureRestServerRef) {.async.} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
-  notice "Secure REST service stopped", address = $rs.server.address
+  notice "Secure REST service stopped", address = $rs.localAddress()
 
 proc drop*(rs: SecureRestServerRef): Future[void] =
   ## Drop all pending connections.
@@ -86,7 +98,7 @@ proc drop*(rs: SecureRestServerRef): Future[void] =
 proc closeWait*(rs: SecureRestServerRef) {.async.} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
-  notice "Secure REST service closed", address = $rs.server.address
+  notice "Secure REST service closed", address = $rs.localAddress()
 
 proc join*(rs: SecureRestServerRef): Future[void] =
   ## Wait until REST server will not be closed.
