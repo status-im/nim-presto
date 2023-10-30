@@ -11,7 +11,7 @@ import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import chronicles except error
 import httputils, stew/base10
 import segpath, common, macrocommon, agent
-export httpclient, httptable, httpcommon, options, agent, httputils
+export chronos, httpclient, httptable, httpcommon, options, agent, httputils
 export SocketFlags
 
 when defined(metrics):
@@ -137,11 +137,13 @@ proc new*(t: typedesc[RestClientRef],
           idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
           userAgent = PrestoIdent,
-          socketFlags: set[SocketFlags] = {}
+          socketFlags: set[SocketFlags] = {},
+          dualstack = DualStackType.Auto
          ): RestResult[RestClientRef] =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
-                                   idleTimeout, idlePeriod, socketFlags)
+                                   idleTimeout, idlePeriod, socketFlags,
+                                   dualstack = dualstack)
   var uri = parseUri(url)
   uri.path = ""
   uri.query = ""
@@ -168,11 +170,13 @@ proc new*(t: typedesc[RestClientRef],
           idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
           userAgent = PrestoIdent,
-          socketFlags: set[SocketFlags] = {}
+          socketFlags: set[SocketFlags] = {},
+          dualstack = DualStackType.Auto
          ): RestClientRef =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
-                                   idleTimeout, idlePeriod, socketFlags)
+                                   idleTimeout, idlePeriod, socketFlags,
+                                   dualstack = dualstack)
   RestClientRef(session: session, address: address, agent: userAgent,
                 flags: flags)
 
@@ -189,11 +193,13 @@ proc new*(t: typedesc[RestClientRef],
           idlePeriod = HttpConnectionCheckPeriod,
           bufferSize: int = 4096,
           userAgent = PrestoIdent,
-          socketFlags: set[SocketFlags] = {}
+          socketFlags: set[SocketFlags] = {},
+          dualstack = DualStackType.Auto
          ): RestClientRef =
   let session = HttpSessionRef.new(httpFlags, maxRedirections, connectTimeout,
                                    headersTimeout, bufferSize, maxConnections,
-                                   idleTimeout, idlePeriod, socketFlags)
+                                   idleTimeout, idlePeriod, socketFlags,
+                                   dualstack = dualstack)
   let address = ta.getAddress(scheme, "")
   RestClientRef(session: session, address: address, agent: userAgent,
                 flags: flags)

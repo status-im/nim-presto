@@ -38,6 +38,7 @@ proc new*(t: typedesc[SecureRestServerRef],
           maxHeadersSize: int = 8192,
           maxRequestBodySize: int = 1_048_576,
           requestErrorHandler: RestRequestErrorHandler = nil,
+          dualstack = DualStackType.Auto,
           errorType: type = cstring
          ): Result[SecureRestServerRef, errorType] =
   var server = SecureRestServerRef(
@@ -53,7 +54,7 @@ proc new*(t: typedesc[SecureRestServerRef],
                                      serverUri, serverIdent, secureFlags,
                                      maxConnections, bufferSize, backlogSize,
                                      httpHeadersTimeout, maxHeadersSize,
-                                     maxRequestBodySize)
+                                     maxRequestBodySize, dualstack = dualstack)
   if sres.isOk():
     server.server = sres.get()
     ok(server)
