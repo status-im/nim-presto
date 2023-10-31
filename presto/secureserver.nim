@@ -13,6 +13,8 @@ import stew/results
 import route, common, segpath, servercommon, serverprivate, agent
 export options, chronos, shttpserver, servercommon, chronicles, agent
 
+{.push raises: [].}
+
 type
   SecureRestServer* = object of RootObj
     server*: SecureHttpServerRef
@@ -68,11 +70,11 @@ proc new*(t: typedesc[SecureRestServerRef],
     else:
       {.fatal: "Error type is not supported".}
 
-proc localAddress*(rs: SecureRestServerRef): TransportAddress {.raises: [].} =
+proc localAddress*(rs: SecureRestServerRef): TransportAddress =
   ## Returns `rs` bound local socket address.
   rs.server.instance.localAddress()
 
-proc state*(rs: SecureRestServerRef): RestServerState {.raises: [].} =
+proc state*(rs: SecureRestServerRef): RestServerState =
   ## Returns current REST server's state.
   case rs.server.state
   of HttpServerState.ServerClosed:
