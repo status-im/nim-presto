@@ -6,14 +6,15 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[options, json, strutils]
 import chronos, chronos/apps/http/httpserver
 import chronicles
 import stew/results
 import route, common, segpath, servercommon, serverprivate, agent
 export options, chronos, httpserver, servercommon, chronicles, agent
-
-{.push raises: [].}
 
 type
   RestServer* = object of RootObj
@@ -42,7 +43,8 @@ proc new*(t: typedesc[RestServerRef],
           ): Result[RestServerRef, errorType] =
   var server = RestServerRef(router: router, errorHandler: requestErrorHandler)
 
-  proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
+  proc processCallback(rf: RequestFence): Future[HttpResponseRef] {.
+       async: (raw: true, raises: [CancelledError, HttpResponseError]).} =
     processRestRequest[RestServerRef](server, rf)
 
   let sres = HttpServerRef.new(address, processCallback, serverFlags,
@@ -82,20 +84,22 @@ proc start*(rs: RestServerRef) =
   rs.server.start()
   notice "REST service started", address = $rs.localAddress()
 
-proc stop*(rs: RestServerRef) {.async.} =
+proc stop*(rs: RestServerRef) {.async: (raises: []).} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
   notice "REST service stopped", address = $rs.localAddress()
 
-proc drop*(rs: RestServerRef): Future[void] =
+proc drop*(rs: RestServerRef): Future[void] {.
+     async: (raw: true, raises: []).} =
   ## Drop all pending connections.
   rs.server.drop()
 
-proc closeWait*(rs: RestServerRef) {.async.} =
+proc closeWait*(rs: RestServerRef) {.async: (raises: []).} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
   notice "REST service closed", address = $rs.localAddress()
 
-proc join*(rs: RestServerRef): Future[void] =
+proc join*(rs: RestServerRef): Future[void] {.
+     async: (raw: true, raises: [CancelledError]).} =
   ## Wait until REST server will not be closed.
   rs.server.join()

@@ -6,12 +6,13 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import chronos/apps/http/httptable
+
+{.push raises: [].}
+
+import chronos/apps/http/[httpcommon, httptable]
 import stew/[results, byteutils], httputils
 
 export results, httputils, httptable
-
-{.push raises: [].}
 
 type
   ContentBody* = object
@@ -51,7 +52,7 @@ type
   ByteChar* = string | seq[byte]
 
   RestDefect* = object of Defect
-  RestError* = object of CatchableError
+  RestError* = object of HttpError
   RestBadRequestError* = object of RestError
   RestEncodingError* = object of RestError
     field*: cstring

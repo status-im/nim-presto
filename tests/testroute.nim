@@ -378,8 +378,9 @@ suite "REST API router & macro tests":
     proc apiCallback(
       request: HttpRequestRef, pathParams: HttpTable,
       queryParams: HttpTable,
-      body: Option[ContentBody]): Future[RestApiResponse] =
-      discard
+      body: Option[ContentBody]): Future[RestApiResponse] {.
+        async: (raises: [CancelledError]).} =
+        discard
 
     # Use HTTP method GET
     router.addRoute(MethodGet, "/unique/path/1", apiCallback)

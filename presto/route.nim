@@ -6,6 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[macros, options]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import httputils
@@ -23,7 +26,7 @@ type
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
          body: Option[ContentBody]): Future[RestApiResponse] {.
-      raises: [], gcsafe.}
+      async: (raises: [CancelledError]), gcsafe.}
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
@@ -69,7 +72,7 @@ proc optionsRequestHandler(
        pathParams: HttpTable,
        queryParams: HttpTable,
        body: Option[ContentBody]
-     ): Future[RestApiResponse] {.async.} =
+     ): Future[RestApiResponse] {.async: (raises: [CancelledError]), gcsafe.} =
   return RestApiResponse.response("", Http200)
 
 proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
@@ -383,7 +386,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     proc `doMain`(`requestParam`: HttpRequestRef, `pathParams`: HttpTable,
                   `queryParams`: HttpTable,
                   `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
-         async.} =
+         async: (raises: [CancelledError]).} =
       template preferredContentType(
         t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
         `requestParam`.preferredContentType(t)

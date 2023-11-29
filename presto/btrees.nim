@@ -10,6 +10,8 @@
 ## BTree implementation with few features, but good enough for the
 ## Nim compiler's needs.
 
+{.push raises: [].}
+
 const
   M = 64     # max children per B-tree node = M-1
              # (must be even and greater than 2)

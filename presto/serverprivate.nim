@@ -6,6 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[options, strutils]
 import chronos, chronicles, stew/[base10, results]
 import route, common, segpath, servercommon
@@ -27,7 +30,8 @@ when defined(metrics):
                labels = ["endpoint"]
 
 proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
-     async.} =
+     async: (raises: [CancelledError, HttpCriticalError,
+                      RestBadRequestError]).} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
   if not(r.hasBody()):
@@ -85,10 +89,9 @@ when defined(metrics):
 
 proc processRestRequest*[T](server: T,
                             rf: RequestFence): Future[HttpResponseRef] {.
-     gcsafe, async.} =
+     gcsafe, async: (raises: [CancelledError, HttpResponseError]).} =
   const
     SendResponseError = "Error occured while sending response"
-    UnexpectedResponseError = "Unexpected error occured while sending response"
 
   template sresponse(request: HttpRequestRef, httpCode: HttpCode,
                      error: RestRequestError): HttpResponseRef =
@@ -103,12 +106,6 @@ proc processRestRequest*[T](server: T,
             uri = $request.uri, code = exc.code,
             error_msg = $exc.msg
       request.getResponse()
-    except CatchableError as exc:
-      warn UnexpectedResponseError,
-           meth = $request.meth, peer = $request.remoteAddress(),
-           uri = $request.uri,  error_msg = $exc.msg,
-           error_name = $exc.name
-      request.getResponse()
 
   template sresponse(request: HttpRequestRef,
                      httpCode: HttpCode): HttpResponseRef =
@@ -121,12 +118,6 @@ proc processRestRequest*[T](server: T,
       debug SendResponseError,
             meth = $request.meth, peer = $request.remoteAddress(),
             uri = $request.uri, code = exc.code, error_msg = $exc.msg
-      request.getResponse()
-    except CatchableError as exc:
-      warn UnexpectedResponseError,
-           meth = $request.meth, peer = $request.remoteAddress(),
-           uri = $request.uri,  error_msg = $exc.msg,
-           error_name = $exc.name
       request.getResponse()
 
   if rf.isOk():
@@ -169,17 +160,6 @@ proc processRestRequest*[T](server: T,
 
               return sresponse(request, Http400,
                                RestRequestError.InvalidContentType)
-            except CatchableError as exc:
-              warn "Unexpected exception while getting request body",
-                    uri = $request.uri, peer = $request.remoteAddress(),
-                    meth = $request.meth, error_name = $exc.name,
-                    error_msg = $exc.msg
-
-              when defined(metrics):
-                processStatusMetrics(route, Http400)
-
-              return sresponse(request, Http400,
-                               RestRequestError.Unexpected)
           else:
             none[ContentBody]()
 
@@ -210,16 +190,6 @@ proc processRestRequest*[T](server: T,
                 processStatusMetrics(route, exc.code,
                                      Moment.now() - responseStart)
               return sresponse(request, exc.code)
-            except CatchableError as exc:
-              warn "Unexpected error occured while processing a request",
-                    meth = $request.meth, peer = $request.remoteAddress(),
-                    uri = $request.uri, path_params = pathParams,
-                    query_params = queryParams, content_body = optBody,
-                    error_msg = $exc.msg, error_name = $exc.name
-              when defined(metrics):
-                processStatusMetrics(route, Http503,
-                                     Moment.now() - responseStart)
-              return sresponse(request, Http503)
         try:
           if not(request.responded()):
             case restRes.kind
@@ -348,12 +318,6 @@ proc processRestRequest*[T](server: T,
           debug SendResponseError,
                 meth = $request.meth, peer = $request.remoteAddress(),
                 uri = $request.uri, code = exc.code, error_msg = $exc.msg
-          return request.getResponse()
-        except CatchableError as exc:
-          warn UnexpectedResponseError,
-               meth = $request.meth, peer = $request.remoteAddress(),
-               uri = $request.uri,  error_msg = $exc.msg,
-               error_name = $exc.name
           return request.getResponse()
       else:
         debug "Could not find requested resource", meth = $request.meth,

@@ -6,14 +6,15 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/options
 import chronos, chronos/apps/http/shttpserver
 import chronicles
 import stew/results
 import route, common, segpath, servercommon, serverprivate, agent
 export options, chronos, shttpserver, servercommon, chronicles, agent
-
-{.push raises: [].}
 
 type
   SecureRestServer* = object of RootObj
@@ -48,7 +49,8 @@ proc new*(t: typedesc[SecureRestServerRef],
     errorHandler: requestErrorHandler
   )
 
-  proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
+  proc processCallback(rf: RequestFence): Future[HttpResponseRef] {.
+       async: (raw: true, raises: [CancelledError, HttpResponseError]).} =
     processRestRequest(server, rf)
 
   let sres = SecureHttpServerRef.new(address, processCallback, tlsPrivateKey,
@@ -89,20 +91,22 @@ proc start*(rs: SecureRestServerRef) =
   rs.server.start()
   notice "Secure REST service started", address = $rs.localAddress()
 
-proc stop*(rs: SecureRestServerRef) {.async.} =
+proc stop*(rs: SecureRestServerRef) {.async: (raises: []).} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
   notice "Secure REST service stopped", address = $rs.localAddress()
 
-proc drop*(rs: SecureRestServerRef): Future[void] =
+proc drop*(rs: SecureRestServerRef): Future[void] {.
+     async: (raw: true, raises: []).} =
   ## Drop all pending connections.
   rs.server.drop()
 
-proc closeWait*(rs: SecureRestServerRef) {.async.} =
+proc closeWait*(rs: SecureRestServerRef) {.async: (raises: []).} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
   notice "Secure REST service closed", address = $rs.localAddress()
 
-proc join*(rs: SecureRestServerRef): Future[void] =
+proc join*(rs: SecureRestServerRef): Future[void] {.
+     async: (raw: true, raises: [CancelledError]).} =
   ## Wait until REST server will not be closed.
   rs.server.join()
