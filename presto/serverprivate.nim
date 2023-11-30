@@ -6,7 +6,7 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
-import std/[options, strutils]
+import std/[options, strutils, re]
 import chronos, chronicles, stew/[base10, results]
 import route, common, segpath, servercommon
 
@@ -41,16 +41,11 @@ proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
   return some[ContentBody](
     ContentBody(contentType: r.contentTypeData.get(), data: data))
 
-proc originsMatch(requestOrigin, allowedOrigin: string): bool =
-  if allowedOrigin.startsWith("http://") or
-     allowedOrigin.startsWith("https://"):
-    requestOrigin == allowedOrigin
-  elif requestOrigin.startsWith("http://"):
-    requestOrigin.toOpenArray(7, requestOrigin.len - 1) == allowedOrigin
-  elif requestOrigin.startsWith("https://"):
-    requestOrigin.toOpenArray(8, requestOrigin.len - 1) == allowedOrigin
-  else:
-    false
+proc originsMatch(requestOrigin: string, allowedOriginMatcher: Option[Regex]): bool =
+  if allowedOriginMatcher.isNone():
+    return false
+
+  return requestOrigin.match(allowedOriginMatcher.get())
 
 proc mergeHttpHeaders(a: var HttpTable, b: HttpTable) =
   # Copy headers from table ``b`` to table ``a`` whose keys are not present in
@@ -240,7 +235,7 @@ proc processRestRequest*[T](server: T,
                 if origin.len == 1:
                   if everyOriginAllowed:
                     headers.add("Access-Control-Allow-Origin", "*")
-                  elif originsMatch(origin[0], server.router.allowedOrigin.get):
+                  elif originsMatch(origin[0], server.router.allowedOriginMatcher):
                     # The Vary: Origin header to must be set to prevent
                     # potential cache poisoning attacks:
                     # https://textslashplain.com/2018/08/02/cors-and-vary/
@@ -274,7 +269,7 @@ proc processRestRequest*[T](server: T,
                 if origin.len == 1:
                   if everyOriginAllowed:
                     headers.add("Access-Control-Allow-Origin", "*")
-                  elif originsMatch(origin[0], server.router.allowedOrigin.get):
+                  elif originsMatch(origin[0], server.router.allowedOriginMatcher):
                     # The Vary: Origin header to must be set to prevent
                     # potential cache poisoning attacks:
                     # https://textslashplain.com/2018/08/02/cors-and-vary/

@@ -62,6 +62,7 @@ proc init(t: typedesc[ClientResponse], status: int, data: string,
 proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
                 body: string, ctype = "",
                 accept = "", encoding = "",
+                origin = "",
                 length = -1): Future[ClientResponse] {.async.} =
   var request = $meth & " " & $parseUri(url) & " HTTP/1.1\r\n"
   request.add("Host: " & $server & "\r\n")
@@ -76,6 +77,8 @@ proc httpClient(server: TransportAddress, meth: HttpMethod, url: string,
     request.add("Accept: " & accept & "\r\n")
   if len(encoding) > 0:
     request.add("Transfer-Encoding: " & encoding & "\r\n")
+  if len(origin) > 0:
+    request.add("Origin: " & origin & "\r\n")
   request.add("\r\n")
 
   if len(body) > 0:
@@ -1047,6 +1050,76 @@ suite "REST API server test suite":
       let server = sres.get()
       server.start()
       await server.stop()
+      await server.closeWait()
+
+  asyncTest "Responses with CORS test":
+    var router = RestRouter.init(testValidate, allowedOrigin = some("localhost:*,127.0.0.1:80??,http://myhost.com,https://myhost.hu:3000"))
+    router.api(MethodGet, "/test/get/success") do (
+      param: Option[string]) -> RestApiResponse:
+      return RestApiResponse.response("TEST:OK", Http200)
+
+    const HttpHeadersSuccessVectors = [
+      ("/test/get/success?param=test1",
+       "http://localhost:3000",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "http://localhost:3000")])),
+      ("/test/get/success?param=test1",
+       "https://127.0.0.1:8080",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://127.0.0.1:8080")])),
+      ("/test/get/success?param=test1",
+       "https://127.0.0.1:80",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://127.0.0.1:80")])),
+      ("/test/get/success?param=test1",
+       "https://127.0.0.1:8011",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://127.0.0.1:8011")])),
+      ("/test/get/success?param=test1",
+       "http://myhost.com",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "http://myhost.com")])),
+       ("/test/get/success?param=test1",
+       "https://myhost.hu:3000",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://myhost.hu:3000")]))
+    ]
+
+    const HttpHeadersFailureVectors = [
+      ("/test/get/success?param=test1",
+       "https://127.0.0.1:9080",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://127.0.0.1:9080")])),
+      ("/test/get/success?param=test1",
+       "https://127.0.0.2:8011",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://127.0.0.2:8011")])),
+      ("/test/get/success?param=test1",
+       "http://myhost.com",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "https://myhost.com")])),
+       ("/test/get/success?param=test1",
+       "http://myhost.hu:3000",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "http://myhost.hu:3000")])),
+       ("/test/get/success?param=test1",
+       "http://myhost.hu",
+       ClientResponse.init(200, "TEST:OK",
+         [("Access-Control-Allow-Origin", "http://myhost.hu")]))
+    ]
+
+    var sres = RestServerRef.new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      for item in HttpHeadersSuccessVectors:
+        let res = await httpClient(serverAddress, MethodGet, item[0], body = "", origin = item[1])
+        check cmpWithHeaders(res, item[2])
+
+      for item in HttpHeadersFailureVectors:
+        let res = await httpClient(serverAddress, MethodGet, item[0], body = "", origin = item[1])
+        check not cmpWithHeaders(res, item[2])
+    finally:
       await server.closeWait()
 
   test "Leaks test":
