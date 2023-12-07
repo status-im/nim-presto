@@ -85,7 +85,7 @@ when defined(metrics):
 
 proc processRestRequest*[T](server: T,
                             rf: RequestFence): Future[HttpResponseRef] {.
-     gcsafe, async.} =
+     gcsafe, async: (raises: [CancelledError, HttpResponseError]).} =
   const
     SendResponseError = "Error occured while sending response"
     UnexpectedResponseError = "Unexpected error occured while sending response"

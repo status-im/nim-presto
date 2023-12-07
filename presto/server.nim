@@ -42,8 +42,10 @@ proc new*(t: typedesc[RestServerRef],
           ): Result[RestServerRef, errorType] =
   var server = RestServerRef(router: router, errorHandler: requestErrorHandler)
 
-  proc processCallback(rf: RequestFence): Future[HttpResponseRef] =
-    processRestRequest[RestServerRef](server, rf)
+  proc processCallback(rf: RequestFence): Future[HttpResponseRef]
+                                          {.async: (raises: [CancelledError, HttpResponseError]),
+                                           gcsafe.} =
+    return await processRestRequest[RestServerRef](server, rf)
 
   let sres = HttpServerRef.new(address, processCallback, serverFlags,
                                socketFlags, serverUri, serverIdent,
