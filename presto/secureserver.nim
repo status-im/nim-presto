@@ -50,7 +50,7 @@ proc new*(t: typedesc[SecureRestServerRef],
   )
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] {.
-       async: (raw: true, raises: [CancelledError, HttpResponseError]).} =
+       async: (raw: true, raises: [CancelledError]).} =
     processRestRequest(server, rf)
 
   let sres = SecureHttpServerRef.new(address, processCallback, tlsPrivateKey,

@@ -26,7 +26,7 @@ type
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
          body: Option[ContentBody]): Future[RestApiResponse] {.
-      async: (raises: [CancelledError]), gcsafe.}
+      async: (raises: [CancelledError]).}
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect

@@ -483,19 +483,19 @@ suite "REST API server test suite":
       of 1:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
       of 2:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
         return RestApiResponse.response("")
       of 3:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
         return RestApiResponse.error(Http422, "error")
       else:
         return RestApiResponse.error(Http426, "error")
@@ -535,19 +535,19 @@ suite "REST API server test suite":
       of 1:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
       of 2:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
         return RestApiResponse.response("some result")
       of 3:
         try:
           await resp.sendBody(restResp)
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
         return RestApiResponse.error(Http422, "error")
       else:
         return RestApiResponse.error(Http426, "error")
@@ -915,8 +915,8 @@ suite "REST API server test suite":
       let body =
         try:
           await request.getBody()
-        except HttpCriticalError as exc:
-          raiseAssert "HttpCriticalError, reason: " & $exc.msg
+        except HttpError as exc:
+          raiseAssert "HttpError, reason: " & $exc.msg
       return
         RestApiResponse.response(
           "type[" & contentType & ":" & body.toHex() & "]")
@@ -995,7 +995,7 @@ suite "REST API server test suite":
         of RestRequestError.Unexpected:
           # This type of error should not be happened at all
           defaultResponse()
-      except HttpCriticalError:
+      except HttpError:
         # We already reporting error, so discarding all future errors.
         defaultResponse()
 
