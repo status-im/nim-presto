@@ -139,6 +139,9 @@ template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
   else:
     raiseAssert("The route is already in the routing table")
 
+# TODO (cheatfate): There is many duplicates in `addRoute` declarations just
+# because https://github.com/nim-lang/Nim/issues/23218 is not solved yet.
+
 proc addRoute*(rr: var RestRouter, meth: HttpMethod, path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
                handler: RestApiCallback) =
