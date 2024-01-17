@@ -6,13 +6,14 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[uri, strutils]
 import stew/[bitops2, results]
 import chronos/apps
 import common
 export common, apps
-
-{.push raises: [].}
 
 type
   PatternCallback* = proc(pattern: string,

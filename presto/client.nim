@@ -6,6 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import chronicles except error
@@ -204,7 +207,7 @@ proc new*(t: typedesc[RestClientRef],
   RestClientRef(session: session, address: address, agent: userAgent,
                 flags: flags)
 
-proc closeWait*(client: RestClientRef) {.async.} =
+proc closeWait*(client: RestClientRef) {.async: (raises: []).} =
   await client.session.closeWait()
 
 proc toHttpFlags(flags: RestConnectionFlags): set[HttpClientRequestFlag] =
@@ -294,7 +297,12 @@ proc getAcceptOrDefault(prc: NimNode,
 proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
-    if node.kind == nnkIdent and node.strVal == "async":
+    if (node.kind == nnkIdent) and (node.strVal == "async"):
+      # Simple {.async.} pragma.
+      return node
+    elif (node.kind == nnkExprColonExpr) and (node[0].kind == nnkIdent) and
+         (node[0].strVal == "async"):
+      # {.async: (...).} pragma.
       return node
 
 proc getMetricsPragmaOrDefault(prc: NimNode,
@@ -337,7 +345,7 @@ proc getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
   newTree(nnkCurly)
 
 proc raiseRestEncodingStringError*(field: static string) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestEncodingError].} =
   var msg = "Unable to encode object to string, field "
   msg.add("[")
   msg.add(field)
@@ -347,7 +355,7 @@ proc raiseRestEncodingStringError*(field: static string) {.
   raise error
 
 proc raiseRestEncodingBytesError*(field: static string) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestEncodingError].} =
   var msg = "Unable to encode object to bytes, field "
   msg.add("[")
   msg.add(field)
@@ -357,7 +365,7 @@ proc raiseRestEncodingBytesError*(field: static string) {.
   raise error
 
 proc raiseRestCommunicationError*(exc: ref HttpError) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestCommunicationError].} =
   var msg = "Communication failed while sending/receiving request"
   msg.add(", http error [")
   msg.add(exc.name)
@@ -368,7 +376,7 @@ proc raiseRestCommunicationError*(exc: ref HttpError) {.
   raise error
 
 proc raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestCommunicationError].} =
   var msg = "Communication failed while sending request's body"
   msg.add(", stream error [")
   msg.add(exc.name)
@@ -379,7 +387,7 @@ proc raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
   raise error
 
 proc raiseRestResponseError*(resp: RestPlainResponse) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestResponseError].} =
   var msg = "Unsuccessfull response received"
   msg.add(", http code [")
   msg.add(Base10.toString(uint64(resp.status)))
@@ -391,12 +399,13 @@ proc raiseRestResponseError*(resp: RestPlainResponse) {.
   raise error
 
 proc raiseRestRedirectionError*(msg: string) {.
-     noreturn, noinline.} =
+     noreturn, noinline, raises: [RestRedirectionError].} =
   var msg = "Unable to follow redirect location, "
   msg.add(msg)
   raise (ref RestRedirectionError)(msg: msg)
 
-proc raiseRestDecodingBytesError*(message: cstring) {.noreturn, noinline.} =
+proc raiseRestDecodingBytesError*(message: cstring) {.
+     noreturn, noinline, raises: [RestDecodingError].} =
   var msg = "Unable to decode REST response"
   msg.add(", error [")
   msg.add(message)
@@ -429,7 +438,8 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
                              acceptIdent: NimNode,
                              extraHeadersIdent: NimNode,
                              acceptValue: NimNode,
-                             stmtList: NimNode): NimNode {.compileTime.} =
+                             stmtList: NimNode,
+                             retKind: RestReturnKind): NimNode {.compileTime.} =
   var procdef = copyNimTree(prc)
   var parameters = copyNimTree(prc.findChild(it.kind == nnkFormalParams))
   var pragmas = copyNimTree(prc.pragma())
@@ -447,7 +457,29 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
     newTree(nnkIdentDefs, acceptIdent, newIdentNode("string"),
             acceptValue)
 
-  let asyncPragmaArg = newIdentNode("async")
+  let exceptions =
+    case retKind
+    of RestReturnKind.Status, RestReturnKind.PlainResponse,
+       RestReturnKind.HttpResponse:
+      newTree(nnkBracket, newIdentNode("CancelledError"),
+                          newIdentNode("RestEncodingError"),
+                          newIdentNode("RestCommunicationError"))
+    of RestReturnKind.GenericResponse:
+      newTree(nnkBracket, newIdentNode("CancelledError"),
+                          newIdentNode("RestEncodingError"),
+                          newIdentNode("RestCommunicationError"),
+                          newIdentNode("RestDecodingError"))
+    of RestReturnKind.Value:
+      newTree(nnkBracket, newIdentNode("CancelledError"),
+                          newIdentNode("RestEncodingError"),
+                          newIdentNode("RestCommunicationError"),
+                          newIdentNode("RestResponseError"),
+                          newIdentNode("RestDecodingError"))
+
+  let asyncPragmaArg = newColonExpr(
+    newIdentNode("async"),
+    newTree(nnkTupleConstr,
+            newColonExpr(newIdentNode("raises"), exceptions)))
 
   var newParams =
     block:
@@ -491,7 +523,7 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
           of nnkExprColonExpr:
             item[0].expectKind(nnkIdent)
             case item[0].strVal().toLowerAscii()
-            of "endpoint", "meth", "accept", "connection", "metrics",
+            of "endpoint", "meth", "async", "accept", "connection", "metrics",
                "metricstypes":
               false
             else:
@@ -519,29 +551,33 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
   procdef
 
 template closeObjects(o1, o2, o3: untyped): untyped =
+  var pending: seq[Future[void]]
   if not(isNil(o1)):
-    await o1.closeWait()
+    pending.add(o1.closeWait())
     o1 = nil
   if not(isNil(o2)):
-    await o2.closeWait()
+    pending.add(o2.closeWait())
     o2 = nil
   if not(isNil(o3)):
-    await o3.closeWait()
+    pending.add(o3.closeWait())
     o3 = nil
+  await noCancel allFutures(pending)
 
 template closeObjects(o1, o2, o3, o4: untyped): untyped =
+  var pending: seq[Future[void]]
   if not(isNil(o1)):
-    await o1.closeWait()
+    pending.add(o1.closeWait())
     o1 = nil
   if not(isNil(o2)):
-    await o2.closeWait()
+    pending.add(o2.closeWait())
     o2 = nil
   if not(isNil(o3)):
-    await o3.closeWait()
+    pending.add(o3.closeWait())
     o3 = nil
   if not(isNil(o4)):
-    await o4.closeWait()
+    pending.add(o4.closeWait())
     o4 = nil
+  await noCancel allFutures(pending)
 
 when defined(metrics):
   proc processStatusMetrics(ep: string, status: int) =
@@ -564,7 +600,8 @@ proc processRestResponse(
        flags: set[RestRequestFlag],
        endpoint: Opt[string],
        metricsTypes: RestClientMetricsTypes
-     ): Future[RestPlainResponse] {.async.} =
+     ): Future[RestPlainResponse] {.
+     async: (raises: [CancelledError, RestCommunicationError]).} =
   let address = response.address
   try:
     let res =
@@ -609,18 +646,13 @@ proc processRestResponse(
     if not(isNil(response)):
       await response.closeWait()
     raiseRestCommunicationError(exc)
-  except CatchableError as exc:
-    debug "REST client got an unexpected exception while reading response",
-          address, errorName = exc.name, errorMsg = exc.msg
-    if not(isNil(response)):
-      await response.closeWait()
-    raise(exc)
 
 proc requestWithoutBody*(
        req: HttpClientRequestRef,
        endpoint: Opt[string],
        metricsTypes: RestClientMetricsTypes
-     ): Future[HttpClientResponseRef] {.async.} =
+     ): Future[HttpClientResponseRef] {.
+     async: (raises: [CancelledError, RestCommunicationError]).} =
   var
     request = req
     redirect: HttpClientRequestRef = nil
@@ -676,16 +708,14 @@ proc requestWithoutBody*(
         request = nil
         return response
     except CancelledError as exc:
-      # TODO: when `finally` proved to work inside loops, move closeWait() logic
-      # to `finally` handler.
       debug "REST client request was interrupted", address
       closeObjects(request, redirect, response)
       raise exc
-    except RestError as exc:
+    except RestRedirectionError as exc:
       debug "REST client redirection error", address,
             errorName = exc.name, errorMsg = exc.msg
       closeObjects(request, redirect, response)
-      raise exc
+      raiseRestCommunicationError(exc)
     except HttpError as exc:
       debug "REST client communication error", address,
             errorName = exc.name, errorMsg = exc.msg
@@ -699,7 +729,8 @@ proc requestWithBody*(
        chunkSize: int,
        endpoint: Opt[string],
        metricsTypes: RestClientMetricsTypes
-     ): Future[HttpClientResponseRef] {.async.} =
+     ): Future[HttpClientResponseRef] {.
+     async: (raises: [CancelledError, RestCommunicationError]).} =
   doAssert(chunkSize > 0 and chunkSize <= high(int))
   var
     request = req
@@ -779,16 +810,14 @@ proc requestWithBody*(
         request = nil
         return response
     except CancelledError as exc:
-      # TODO: when `finally` proved to work inside loops, move closeWait() logic
-      # to `finally` handler.
       debug "REST request was interrupted", address
       closeObjects(writer, request, redirect, response)
       raise exc
-    except RestError as exc:
+    except RestRedirectionError as exc:
       debug "REST client redirection error", address,
             errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
-      raise exc
+      raiseRestCommunicationError(exc)
     except HttpError as exc:
       debug "REST client communication error", address,
             errorName = exc.name, errorMsg = exc.msg
@@ -802,11 +831,6 @@ proc requestWithBody*(
             errorName = exc.name, errorMsg = exc.msg
       closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
-    except CatchableError as exc:
-      debug "REST client got an unexpected error", address,
-            errorName = exc.name, errorMsg = exc.msg
-      closeObjects(writer, request, redirect, response)
-      raise(exc)
 
 proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   if prc.kind notin {nnkProcDef}:
@@ -1144,7 +1168,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
 
   let res = transformProcDefinition(prc, clientIdent, contentTypeIdent,
                                     acceptTypeIdent, extraHeadersIdent,
-                                    acceptValue, statements)
+                                    acceptValue, statements, returnKind)
   res
 
 macro rest*(prc: untyped): untyped =

@@ -6,6 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/options
 import chronos, chronos/apps/http/httpserver
 import chronicles
@@ -40,4 +43,5 @@ type
 
   RestRequestErrorHandler* = proc(
     error: RestRequestError,
-    request: HttpRequestRef): Future[HttpResponseRef] {.async.}
+    request: HttpRequestRef): Future[HttpResponseRef] {.
+      async: (raises: [CancelledError]).}

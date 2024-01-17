@@ -6,6 +6,9 @@
 #              Licensed under either of
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
+
+{.push raises: [].}
+
 import std/[options, strutils]
 import chronos, chronicles, stew/[base10, results]
 import route, common, segpath, servercommon
@@ -27,7 +30,8 @@ when defined(metrics):
                labels = ["endpoint"]
 
 proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
-     async.} =
+     async: (raises: [CancelledError, HttpTransportError, HttpProtocolError,
+                      RestBadRequestError]).} =
   if r.meth notin PostMethods:
     return none[ContentBody]()
   if not(r.hasBody()):
@@ -83,12 +87,12 @@ when defined(metrics):
       presto_server_prepare_response_time.set(duration.milliseconds(),
                                               @[endpoint])
 
-proc processRestRequest*[T](server: T,
-                            rf: RequestFence): Future[HttpResponseRef] {.
-     gcsafe, async.} =
+proc processRestRequest*[T](
+       server: T,
+       rf: RequestFence
+     ): Future[HttpResponseRef] {.async: (raises: [CancelledError]).} =
   const
     SendResponseError = "Error occured while sending response"
-    UnexpectedResponseError = "Unexpected error occured while sending response"
 
   template sresponse(request: HttpRequestRef, httpCode: HttpCode,
                      error: RestRequestError): HttpResponseRef =
@@ -97,37 +101,11 @@ proc processRestRequest*[T](server: T,
         await request.respond(httpCode)
       else:
         await server.errorHandler(error, request)
-    except HttpCriticalError as exc:
+    except HttpWriteError as exc:
       debug SendResponseError,
             meth = $request.meth, peer = $request.remoteAddress(),
-            uri = $request.uri, code = exc.code,
-            error_msg = $exc.msg
-      request.getResponse()
-    except CatchableError as exc:
-      warn UnexpectedResponseError,
-           meth = $request.meth, peer = $request.remoteAddress(),
-           uri = $request.uri,  error_msg = $exc.msg,
-           error_name = $exc.name
-      request.getResponse()
-
-  template sresponse(request: HttpRequestRef,
-                     httpCode: HttpCode): HttpResponseRef =
-    try:
-      if request.response.isSome():
-        request.getResponse()
-      else:
-        await request.respond(httpCode)
-    except HttpCriticalError as exc:
-      debug SendResponseError,
-            meth = $request.meth, peer = $request.remoteAddress(),
-            uri = $request.uri, code = exc.code, error_msg = $exc.msg
-      request.getResponse()
-    except CatchableError as exc:
-      warn UnexpectedResponseError,
-           meth = $request.meth, peer = $request.remoteAddress(),
-           uri = $request.uri,  error_msg = $exc.msg,
-           error_name = $exc.name
-      request.getResponse()
+            uri = $request.uri, error_msg = $exc.msg
+      defaultResponse(exc)
 
   if rf.isOk():
     let request = rf.get()
@@ -149,7 +127,17 @@ proc processRestRequest*[T](server: T,
           if RestRouterFlag.Raw notin route.flags:
             try:
               await request.getContentBody()
-            except HttpCriticalError as exc:
+            except HttpTransportError as exc:
+              debug "Unable to receive request body", uri = $request.uri,
+                    peer = $request.remoteAddress(), meth = $request.meth,
+                    error_msg = $exc.msg
+
+              when defined(metrics):
+                processStatusMetrics(route, Http400)
+
+              return sresponse(request, Http400,
+                               RestRequestError.InvalidContentBody)
+            except HttpProtocolError as exc:
               debug "Unable to obtain request body", uri = $request.uri,
                     peer = $request.remoteAddress(), meth = $request.meth,
                     error_msg = $exc.msg
@@ -169,17 +157,6 @@ proc processRestRequest*[T](server: T,
 
               return sresponse(request, Http400,
                                RestRequestError.InvalidContentType)
-            except CatchableError as exc:
-              warn "Unexpected exception while getting request body",
-                    uri = $request.uri, peer = $request.remoteAddress(),
-                    meth = $request.meth, error_name = $exc.name,
-                    error_msg = $exc.msg
-
-              when defined(metrics):
-                processStatusMetrics(route, Http400)
-
-              return sresponse(request, Http400,
-                               RestRequestError.Unexpected)
           else:
             none[ContentBody]()
 
@@ -193,33 +170,13 @@ proc processRestRequest*[T](server: T,
 
         let
           restRes =
-            try:
+            block:
               let res = await route.callback(request, pathParams, queryParams,
                                              optBody)
               when defined(metrics):
                 processMetrics(route, Moment.now() - responseStart)
 
               res
-            except HttpCriticalError as exc:
-              debug "Error occurred while processing a request",
-                    meth = $request.meth, peer = $request.remoteAddress(),
-                    uri = $request.uri, code = exc.code,
-                    path_params = pathParams, query_params = queryParams,
-                    content_body = optBody, error_msg = $exc.msg
-              when defined(metrics):
-                processStatusMetrics(route, exc.code,
-                                     Moment.now() - responseStart)
-              return sresponse(request, exc.code)
-            except CatchableError as exc:
-              warn "Unexpected error occured while processing a request",
-                    meth = $request.meth, peer = $request.remoteAddress(),
-                    uri = $request.uri, path_params = pathParams,
-                    query_params = queryParams, content_body = optBody,
-                    error_msg = $exc.msg, error_name = $exc.name
-              when defined(metrics):
-                processStatusMetrics(route, Http503,
-                                     Moment.now() - responseStart)
-              return sresponse(request, Http503)
         try:
           if not(request.responded()):
             case restRes.kind
@@ -229,9 +186,10 @@ proc processRestRequest*[T](server: T,
                       uri = $request.uri
 
               when defined(metrics):
-                processStatusMetrics(route, Http400)
+                processStatusMetrics(route, Http410)
 
-              return await request.respond(Http410)
+              await request.respond(Http410)
+
             of RestApiResponseKind.Status:
               var headers = HttpTable.init()
               if server.router.allowedOrigin.isSome:
@@ -264,7 +222,8 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, restRes.status)
 
-              return await request.respond(restRes.status, "", headers)
+              await request.respond(restRes.status, "", headers)
+
             of RestApiResponseKind.Content:
               var headers = HttpTable.init([("Content-Type",
                                             restRes.content.contentType)])
@@ -300,8 +259,9 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, restRes.status)
 
-              return await request.respond(restRes.status,
-                                           restRes.content.data, headers)
+              await request.respond(restRes.status,
+                                    restRes.content.data, headers)
+
             of RestApiResponseKind.Error:
               let error = restRes.errobj
               debug "Received error response from handler",
@@ -316,8 +276,8 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, error.status)
 
-              return await request.respond(error.status, error.message,
-                                           headers)
+              await request.respond(error.status, error.message, headers)
+
             of RestApiResponseKind.Redirect:
               debug "Received redirection from handler",
                     status = restRes.status.toInt(),
@@ -336,25 +296,18 @@ proc processRestRequest*[T](server: T,
               when defined(metrics):
                 processStatusMetrics(route, restRes.status)
 
-              return await request.redirect(restRes.status, location,
-                                            restRes.headers)
+              await request.redirect(restRes.status, location, restRes.headers)
           else:
             debug "Response was sent in request handler", meth = $request.meth,
                   peer = $request.remoteAddress(), uri = $request.uri,
                   path_params = pathParams, query_params = queryParams,
                   content_body = optBody
-            return request.getResponse()
-        except HttpCriticalError as exc:
+            defaultResponse()
+        except HttpWriteError as exc:
           debug SendResponseError,
                 meth = $request.meth, peer = $request.remoteAddress(),
-                uri = $request.uri, code = exc.code, error_msg = $exc.msg
-          return request.getResponse()
-        except CatchableError as exc:
-          warn UnexpectedResponseError,
-               meth = $request.meth, peer = $request.remoteAddress(),
-               uri = $request.uri,  error_msg = $exc.msg,
-               error_name = $exc.name
-          return request.getResponse()
+                uri = $request.uri, reason = $exc.msg
+          defaultResponse(exc)
       else:
         debug "Could not find requested resource", meth = $request.meth,
               peer = $request.remoteAddress(), uri = $request.uri
@@ -362,7 +315,7 @@ proc processRestRequest*[T](server: T,
         when defined(metrics):
           presto_server_missing_requests_count.inc()
 
-        return sresponse(request, Http404, RestRequestError.NotFound)
+        sresponse(request, Http404, RestRequestError.NotFound)
     else:
       debug "Received invalid request", peer = $request.remoteAddress(),
             meth = $request.meth, uri = $request.uri
@@ -370,7 +323,7 @@ proc processRestRequest*[T](server: T,
       when defined(metrics):
         presto_server_invalid_requests_count.inc()
 
-      return sresponse(request, Http400, RestRequestError.Invalid)
+      sresponse(request, Http400, RestRequestError.Invalid)
   else:
     let httpErr = rf.error()
     if httpErr.error == HttpServerError.DisconnectError:
@@ -380,4 +333,4 @@ proc processRestRequest*[T](server: T,
       debug "Remote peer dropped connection", peer = $httpErr.remote,
             reason = $httpErr.error, code = $httpErr.code
 
-    return defaultResponse()
+    defaultResponse()
