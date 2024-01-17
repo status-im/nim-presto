@@ -7,13 +7,13 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 import std/[macros, options]
-import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
+import chronos, chronos/apps/http/[httpcommon, httptable, httpserver]
 import httputils
 import stew/bitops2
 import btrees
 import common, segpath, macrocommon
 
-export chronos, options, common, httpcommon, httptable
+export chronos, options, common, httpcommon, httptable, httpserver
 
 when defined(metrics):
   import metrics
