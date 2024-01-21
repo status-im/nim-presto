@@ -12,8 +12,8 @@
 import std/options
 import chronos, chronos/apps/http/httpserver
 import chronicles
-import common
-export chronicles, options
+import common, route
+export chronicles, options, httpserver
 
 chronicles.formatIt(HttpTable):
   var res = newSeq[string]()
@@ -45,3 +45,8 @@ type
     error: RestRequestError,
     request: HttpRequestRef): Future[HttpResponseRef] {.
       async: (raises: [CancelledError]).}
+
+  RestServerMiddlewareRef* = ref object of HttpServerMiddlewareRef
+    router*: RestRouter
+    errorHandler*: RestRequestErrorHandler
+    nextHandler*: HttpProcessCallback2

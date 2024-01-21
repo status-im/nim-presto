@@ -1,5 +1,6 @@
-import std/[strutils, parseutils]
+import std/[strutils, parseutils, uri]
 import stew/[byteutils, base10]
+import chronos, chronos/apps
 import ../presto/common
 
 const
@@ -21,6 +22,11 @@ type
 
   GenericType*[T] = object
     data*: T
+
+  ClientResponse* = object
+    status*: int
+    data*: string
+    headers*: HttpTable
 
 proc decodeString*(t: typedesc[GenericType[int]],
                    value: string): RestResult[GenericType[int]] =
@@ -187,3 +193,74 @@ proc `==`*(a, b: CustomType1): bool =
     of Level3:
       a.level3 == b.level3
   )
+
+proc init*(t: typedesc[ClientResponse], status: int): ClientResponse =
+  ClientResponse(status: status)
+
+proc init*(t: typedesc[ClientResponse], status: int,
+           headers: openArray[tuple[key, value: string]]): ClientResponse =
+  let table = HttpTable.init(headers)
+  ClientResponse(status: status, headers: table)
+
+proc init*(t: typedesc[ClientResponse], status: int,
+           data: string): ClientResponse =
+  ClientResponse(status: status, data: data)
+
+proc init*(t: typedesc[ClientResponse], status: int, data: string,
+           headers: HttpTable): ClientResponse =
+  ClientResponse(status: status, data: data, headers: headers)
+
+proc init*(t: typedesc[ClientResponse], status: int, data: string,
+           headers: openArray[tuple[key, value: string]]): ClientResponse =
+  let table = HttpTable.init(headers)
+  ClientResponse(status: status, data: data, headers: table)
+
+proc httpClient*(server: TransportAddress, meth: HttpMethod, url: string,
+                 body: string, ctype = "",
+                 accept = "", encoding = "",
+                 length = -1): Future[ClientResponse] {.async.} =
+  var request = $meth & " " & $parseUri(url) & " HTTP/1.1\r\n"
+  request.add("Host: " & $server & "\r\n")
+  if len(encoding) == 0:
+    if length >= 0:
+      request.add("Content-Length: " & $length & "\r\n")
+    else:
+      request.add("Content-Length: " & $len(body) & "\r\n")
+  if len(ctype) > 0:
+    request.add("Content-Type: " & ctype & "\r\n")
+  if len(accept) > 0:
+    request.add("Accept: " & accept & "\r\n")
+  if len(encoding) > 0:
+    request.add("Transfer-Encoding: " & encoding & "\r\n")
+  request.add("\r\n")
+
+  if len(body) > 0:
+    request.add(body)
+
+  var headersBuf = newSeq[byte](4096)
+  let transp = await connect(server)
+  let wres {.used.} = await transp.write(request)
+  let rlen = await transp.readUntil(addr headersBuf[0], len(headersBuf),
+                                    HeadersMark)
+  headersBuf.setLen(rlen)
+  let resp = parseResponse(headersBuf, true)
+  doAssert(resp.success())
+
+  let headers =
+    block:
+      var res = HttpTable.init()
+      for key, value in resp.headers(headersBuf):
+        res.add(key, value)
+      res
+
+  let length = resp.contentLength()
+  doAssert(length >= 0)
+  let cresp =
+    if length > 0:
+      var dataBuf = newString(length)
+      await transp.readExactly(addr dataBuf[0], len(dataBuf))
+      ClientResponse.init(resp.code, dataBuf, headers)
+    else:
+      ClientResponse.init(resp.code, "", headers)
+  await transp.closeWait()
+  return cresp
