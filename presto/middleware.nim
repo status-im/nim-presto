@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import chronos, chronos/apps/http/httpserver
-import route, servercommon, serverprivate
+import "."/[route, servercommon, serverprivate]
 export httpserver, servercommon, serverprivate
 
 proc new*(

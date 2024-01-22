@@ -12,7 +12,7 @@
 import std/options
 import chronos, chronos/apps/http/httpserver
 import chronicles
-import common, route
+import "."/[common, route]
 export chronicles, options, httpserver
 
 chronicles.formatIt(HttpTable):
