@@ -59,6 +59,8 @@ type
   RestDecodingError* = object of RestError
   RestCommunicationError* = object of RestError
     exc*: ref CatchableError
+  RestDnsResolveError* = object of RestError
+    hostname*: string
   RestRedirectionError* = object of RestError
   RestResponseError* = object of RestError
     status*: int
@@ -186,3 +188,7 @@ proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
 proc redirect*(t: typedesc[RestApiResponse], status: HttpCode = Http307,
                location: string, preserveQuery = false): RestApiResponse =
   redirect(t, status, location, preserveQuery, HttpTable.init())
+
+proc raiseRestDnsResolveError*(msg: string, hostname: string) {.
+     noinline, noreturn, raises: [RestDnsResolveError].} =
+  raise (ref RestDnsResolveError)(msg: msg, hostname: hostname)

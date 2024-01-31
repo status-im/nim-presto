@@ -32,6 +32,9 @@ when defined(metrics):
   declareGauge presto_client_response_time,
                "Time taken to receive response from remote host",
                labels = ["endpoint"]
+  declareGauge presto_client_dns_resolve_time,
+               "Time taken to resolve remote hostname",
+               labels = ["endpoint"]
 
 type
   RestClient* = object of RootObj
@@ -58,7 +61,10 @@ type
   RestHttpResponseRef* = HttpClientResponseRef
 
   RestClientFlag* {.pure.} = enum
-    CommaSeparatedArray
+    CommaSeparatedArray,
+      ## Arrays could be passed as comma-delimieted strings
+    ResolveAlways
+      ## DNS resolution will be made for every request
 
   RestClientFlags* = set[RestClientFlag]
 
@@ -74,6 +80,7 @@ type
   RestConnectionFlags* = set[RestConnectionFlag]
 
   RestClientMetricsType* {.pure.} = enum
+    ResolveTime,
     ConnectTime,
     RequestTime,
     ResponseTime,
@@ -98,6 +105,7 @@ const
   NotAllowedArgumentNames = [RestClientArg, RestContentTypeArg,
                              RestAcceptTypeArg]
   RestClientMetricsAllTypes* = {
+    RestClientMetricsType.ResolveTime,
     RestClientMetricsType.ConnectTime,
     RestClientMetricsType.RequestTime,
     RestClientMetricsType.ResponseTime,
@@ -152,12 +160,9 @@ proc new*(t: typedesc[RestClientRef],
   uri.query = ""
   uri.anchor = ""
 
-  let address =
-    block:
-      let res = session.getAddress(uri)
-      if res.isErr():
-        return err("Unable to resolve remote hostname")
-      res.get()
+  let address = session.getAddress(uri).valueOr:
+    return err("Unable to resolve remote hostname")
+
   ok(RestClientRef(session: session, address: address, agent: userAgent,
                    flags: flags))
 
@@ -218,12 +223,34 @@ proc toHttpFlags(flags: RestConnectionFlags): set[HttpClientRequestFlag] =
     res.incl(HttpClientRequestFlag.CloseConnection)
   res
 
-proc createPostRequest*(client: RestClientRef, path: string, query: string,
-                        contentType: string, acceptType: string,
-                        extraHeaders: openArray[HttpHeaderTuple],
-                        httpMethod: HttpMethod, contentLength: uint64,
-                        flags: RestConnectionFlags): HttpClientRequestRef =
-  var address = client.address
+template getAddress(client: RestClientRef, endpoint: Opt[string]): HttpAddress =
+  mixin set
+  if RestClientFlag.ResolveAlways in client.flags:
+    when defined(metrics):
+      let currentTime = Moment.now()
+    let address = client.session.getAddress(client.address.getUri())
+    when defined(metrics):
+      if endpoint.isSome():
+        let duration = Moment.now() - currentTime
+        presto_client_dns_resolve_time.set(
+          float64(duration.milliseconds()), @[endpoint.get()])
+    if address.isErr():
+      raiseRestDnsResolveError($address.error, $client.address.getUri())
+    address.get()
+  else:
+    when defined(metrics):
+      if endpoint.isSome():
+        presto_client_dns_resolve_time.set(float64(0), @[endpoint.get()])
+    client.address
+
+proc createPostRequest(client: RestClientRef, endpoint: Opt[string],
+                       path: string, query: string,
+                       contentType: string, acceptType: string,
+                       extraHeaders: openArray[HttpHeaderTuple],
+                       httpMethod: HttpMethod, contentLength: uint64,
+                       flags: RestConnectionFlags): HttpClientRequestRef {.
+     raises: [RestDnsResolveError].} =
+  var address = getAddress(client, endpoint)
   address.path = path
   address.query = query
 
@@ -237,12 +264,14 @@ proc createPostRequest*(client: RestClientRef, path: string, query: string,
   HttpClientRequestRef.new(client.session, address, httpMethod,
                            headers = headers, flags = flags.toHttpFlags())
 
-proc createGetRequest*(client: RestClientRef, path: string, query: string,
-                       contentType: string, acceptType: string,
-                       extraHeaders: openArray[HttpHeaderTuple],
-                       httpMethod: HttpMethod,
-                       flags: RestConnectionFlags): HttpClientRequestRef =
-  var address = client.address
+proc createGetRequest(client: RestClientRef, endpoint: Opt[string],
+                      path: string, query: string,
+                      contentType: string, acceptType: string,
+                      extraHeaders: openArray[HttpHeaderTuple],
+                      httpMethod: HttpMethod,
+                      flags: RestConnectionFlags): HttpClientRequestRef {.
+     raises: [RestDnsResolveError].} =
+  var address = getAddress(client, endpoint)
   address.path = path
   address.query = query
 
@@ -463,15 +492,18 @@ proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
        RestReturnKind.HttpResponse:
       newTree(nnkBracket, newIdentNode("CancelledError"),
                           newIdentNode("RestEncodingError"),
+                          newIdentNode("RestDnsResolveError"),
                           newIdentNode("RestCommunicationError"))
     of RestReturnKind.GenericResponse:
       newTree(nnkBracket, newIdentNode("CancelledError"),
                           newIdentNode("RestEncodingError"),
+                          newIdentNode("RestDnsResolveError"),
                           newIdentNode("RestCommunicationError"),
                           newIdentNode("RestDecodingError"))
     of RestReturnKind.Value:
       newTree(nnkBracket, newIdentNode("CancelledError"),
                           newIdentNode("RestEncodingError"),
+                          newIdentNode("RestDnsResolveError"),
                           newIdentNode("RestCommunicationError"),
                           newIdentNode("RestResponseError"),
                           newIdentNode("RestDecodingError"))
@@ -1088,7 +1120,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
         block:
           let chunkSize = `clientIdent`.session.connectionBufferSize
           let `requestIdent` = createPostRequest(
-            `clientIdent`, `requestPath`, `requestQuery`,
+            `clientIdent`, `optMetricsEndpoint`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
             `extraHeadersIdent`, `methodValue`,
             uint64(len(`bodyIdent`)), `connectionFlagsValue`
@@ -1102,7 +1134,7 @@ proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
       let `responseObjectIdent` =
         block:
           let `requestIdent` = createGetRequest(
-            `clientIdent`, `requestPath`, `requestQuery`,
+            `clientIdent`, `optMetricsEndpoint`, `requestPath`, `requestQuery`,
             `contentTypeIdent`, `acceptTypeIdent`,
             `extraHeadersIdent`, `methodValue`, `connectionFlagsValue`
           )
