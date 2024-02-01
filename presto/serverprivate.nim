@@ -138,9 +138,8 @@ proc processRestRequest*[T](
 
         sresponse(request, Http400, RestRequestError.Invalid)
 
-  when T isnot RestServerMiddlewareRef:
-    debug "Received request", peer = $request.remoteAddress(),
-          meth = $request.meth, uri = $request.uri
+  debug "Received request", peer = $request.remoteAddress(),
+        meth = $request.meth, uri = $request.uri
 
   let rres = server.router.getRoute(sres.get())
   if rres.isNone():
@@ -149,7 +148,7 @@ proc processRestRequest*[T](
         await server.nextHandler(rf)
       else:
         debug "Could not find requested resource", meth = $request.meth,
-            peer = $request.remoteAddress(), uri = $request.uri
+              peer = $request.remoteAddress(), uri = $request.uri
 
         when defined(metrics):
           presto_server_missing_requests_count.inc()
@@ -200,11 +199,10 @@ proc processRestRequest*[T](
     else:
       none[ContentBody]()
 
-  when T isnot RestServerMiddlewareRef:
-    debug "Serving API request", peer = $request.remoteAddress(),
-          meth = $request.meth, uri = $request.uri,
-          path_params = pathParams, query_params = queryParams,
-          content_body = optBody
+  debug "Serving API request", peer = $request.remoteAddress(),
+        meth = $request.meth, uri = $request.uri,
+        path_params = pathParams, query_params = queryParams,
+        content_body = optBody
 
   when defined(metrics):
     let responseStart = Moment.now()
@@ -221,20 +219,18 @@ proc processRestRequest*[T](
 
   if request.responded():
     return block:
-      when T isnot RestServerMiddlewareRef:
-        debug "Response was sent in request handler", meth = $request.meth,
-              peer = $request.remoteAddress(), uri = $request.uri,
-              path_params = pathParams, query_params = queryParams,
-              content_body = optBody
+      debug "Response was sent in request handler", meth = $request.meth,
+            peer = $request.remoteAddress(), uri = $request.uri,
+            path_params = pathParams, query_params = queryParams,
+            content_body = optBody
       defaultResponse()
 
   try:
     case restRes.kind
     of RestApiResponseKind.Empty:
-      when T isnot RestServerMiddlewareRef:
-        debug "Received empty response from handler",
-                meth = $request.meth, peer = $request.remoteAddress(),
-                uri = $request.uri
+      debug "Received empty response from handler",
+            meth = $request.meth, peer = $request.remoteAddress(),
+            uri = $request.uri
 
       when defined(metrics):
         processStatusMetrics(route, Http410)
@@ -263,11 +259,10 @@ proc processRestRequest*[T](
           return await request.respond(Http400,
             "Only a single Origin header must be specified")
 
-      when T isnot RestServerMiddlewareRef:
-        debug "Received status response from handler",
-              status = restRes.status.toInt(),
-              meth = $request.meth, peer = $request.remoteAddress(),
-              uri = $request.uri
+      debug "Received status response from handler",
+            status = restRes.status.toInt(),
+            meth = $request.meth, peer = $request.remoteAddress(),
+            uri = $request.uri
 
       headers.mergeHttpHeaders(restRes.headers)
 
@@ -299,13 +294,12 @@ proc processRestRequest*[T](
           return await request.respond(Http400,
             "Only a single Origin header must be specified")
 
-      when T isnot RestServerMiddlewareRef:
-        debug "Received response from handler",
-              status = restRes.status.toInt(),
-              meth = $request.meth, peer = $request.remoteAddress(),
-              uri = $request.uri,
-              content_type = restRes.content.contentType,
-              content_size = len(restRes.content.data)
+      debug "Received response from handler",
+            status = restRes.status.toInt(),
+            meth = $request.meth, peer = $request.remoteAddress(),
+            uri = $request.uri,
+            content_type = restRes.content.contentType,
+            content_size = len(restRes.content.data)
 
       headers.mergeHttpHeaders(restRes.headers)
 
@@ -317,11 +311,10 @@ proc processRestRequest*[T](
 
     of RestApiResponseKind.Error:
       let restError = restRes.errobj
-      when T isnot RestServerMiddlewareRef:
-        debug "Received error response from handler",
-              status = restRes.status.toInt(),
-              meth = $request.meth, peer = $request.remoteAddress(),
-              uri = $request.uri, restError
+      debug "Received error response from handler",
+            status = restRes.status.toInt(),
+            meth = $request.meth, peer = $request.remoteAddress(),
+            uri = $request.uri, restError
 
       var headers = HttpTable.init([("Content-Type",
                                     restError.contentType)])
@@ -334,11 +327,10 @@ proc processRestRequest*[T](
       await request.respond(restError.status, restError.message, headers)
 
     of RestApiResponseKind.Redirect:
-      when T isnot RestServerMiddlewareRef:
-        debug "Received redirection from handler",
-              status = restRes.status.toInt(),
-              meth = $request.meth, peer = $request.remoteAddress(),
-              uri = $request.uri, location = restRes.location
+      debug "Received redirection from handler",
+            status = restRes.status.toInt(),
+            meth = $request.meth, peer = $request.remoteAddress(),
+            uri = $request.uri, location = restRes.location
 
       let location =
         block:
