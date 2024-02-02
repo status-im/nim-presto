@@ -1419,11 +1419,13 @@ suite "REST API client test suite":
 
     proc test3(): RestPlainResponse {.
       rest, endpoint: "/test/simple/1", metrics,
-      metricsTypes: {ConnectTime, RequestTime, ResponseTime, Status}.}
+      metricsTypes: {
+        ResolveTime, ConnectTime, RequestTime, ResponseTime, Status}.}
 
     proc test3p(): RestPlainResponse {.
       rest, endpoint: "/test/simple/1", metrics, meth: MethodGet,
-      metricsTypes: {ConnectTime, RequestTime, ResponseTime, Status}.}
+      metricsTypes: {
+        ResolveTime, ConnectTime, RequestTime, ResponseTime, Status}.}
 
     proc test4(): RestPlainResponse {.
       rest, endpoint: "/test/simple/1", metrics,
@@ -1460,6 +1462,56 @@ suite "REST API client test suite":
 
     await server.stop()
     await server.closeWait()
+
+  asyncTest "ResolveAlways flag test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet, "/test/simple/1") do () -> RestApiResponse:
+      return RestApiResponse.response("ok")
+
+    proc test1(): RestPlainResponse {.rest, endpoint: "/test/simple/1".}
+
+    var sres = RestServerRef.new(router, initTAddress("127.0.0.1:0"))
+    let server = sres.get()
+    server.start()
+
+    let serverAddress = server.server.instance.localAddress()
+
+    let
+      uri1 = "http://localhost:" & $serverAddress.port & "/"
+      uri2 = "http://" & $serverAddress.host & ":" & $serverAddress.port & "/"
+      cres1 = RestClientRef.new(uri1, flags = {RestClientFlag.ResolveAlways})
+      cres2 = RestClientRef.new(uri2, flags = {RestClientFlag.ResolveAlways})
+
+    check:
+      cres1.isOk()
+      cres2.isOk()
+
+    let
+      client1 = cres1.get()
+      client2 = cres2.get()
+
+    try:
+      let
+        resp1 = await test1(client1)
+        resp2 = await test1(client1)
+        resp3 = await test1(client2)
+        resp4 = await test1(client2)
+
+      check:
+        resp1.status == 200
+        resp2.status == 200
+        resp3.status == 200
+        resp4.status == 200
+        resp1.data.bytesToString() == "ok"
+        resp2.data.bytesToString() == "ok"
+        resp3.data.bytesToString() == "ok"
+        resp4.data.bytesToString() == "ok"
+
+    finally:
+      await client1.closeWait()
+      await client2.closeWait()
+      await server.stop()
+      await server.closeWait()
 
   asyncTest "Request without body cancellation leaks test":
     var
