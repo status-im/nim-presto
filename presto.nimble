@@ -28,6 +28,8 @@ proc build(args, path: string) =
 
 proc run(args, path: string) =
   build args & " -r", path
+  if (NimMajor, NimMinor) > (1, 6):
+    build args & " --mm:refc -r", path
 
 task test, "Runs rest tests":
   run "", "tests/testall"
