@@ -13,7 +13,7 @@ import std/[options, json, strutils]
 import chronos, chronos/apps/http/httpserver
 import chronicles
 import stew/results
-import route, common, segpath, servercommon, serverprivate, agent
+import "."/[route, common, segpath, servercommon, serverprivate, agent]
 export options, chronos, httpserver, servercommon, chronicles, agent
 
 type

@@ -12,7 +12,7 @@
 import std/[uri, strutils]
 import stew/[bitops2, results]
 import chronos/apps
-import common
+import "."/common
 export common, apps
 
 type

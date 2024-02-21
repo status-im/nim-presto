@@ -13,7 +13,7 @@ import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import chronicles except error
 import httputils, stew/base10
-import segpath, common, macrocommon, agent
+import "."/[segpath, common, macrocommon, agent]
 export chronos, httpclient, httptable, httpcommon, options, agent, httputils
 export SocketFlags
 

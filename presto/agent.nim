@@ -9,7 +9,7 @@
 
 {.push raises: [].}
 
-import strutils
+import std/strutils
 
 const
   PrestoName* = "nim-presto"
