@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import std/[uri, strutils]
-import stew/[bitops2, results]
+import stew/bitops2
+import results
 import chronos/apps
 import "."/common
 export common, apps
