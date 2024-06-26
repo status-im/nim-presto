@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import std/[options, strutils]
-import chronos, chronicles, stew/[base10, results]
+import chronos, chronicles, stew/base10, results
 import "."/[route, common, segpath, servercommon]
 
 when defined(metrics):

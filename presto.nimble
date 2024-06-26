@@ -11,6 +11,7 @@ requires "nim >= 1.6.0",
          "chronos#head",
          "chronicles",
          "metrics",
+         "results",
          "stew"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
@@ -26,10 +27,10 @@ let cfg =
 proc build(args, path: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
 
-proc run(args, path: string) =
-  build args & " -r", path
+proc run(path: string) =
+  build " --mm:refc -r", path
   if (NimMajor, NimMinor) > (1, 6):
-    build args & " --mm:refc -r", path
+    build " --mm:orc -r", path
 
 task test, "Runs rest tests":
-  run "", "tests/testall"
+  run "tests/testall"

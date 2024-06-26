@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import chronos/apps/http/[httpcommon, httptable]
-import stew/[results, byteutils], httputils
+import results
+import stew/[byteutils], httputils
 
 export results, httputils, httptable
 
