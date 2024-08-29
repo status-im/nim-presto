@@ -6,6 +6,7 @@
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
 ## Installation
+
 You can use Nim's official package manager Nimble to install Presto:
 
 ```
