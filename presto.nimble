@@ -1,14 +1,14 @@
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
-version       = "0.0.4"
+version       = "0.1.0"
 author        = "Status Research & Development GmbH"
 description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
 requires "nim >= 1.6.0",
-         "chronos#head",
+         "chronos ^= 4.0.3",
          "chronicles",
          "metrics",
          "results",
