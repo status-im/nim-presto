@@ -8,7 +8,7 @@ license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
 requires "nim >= 1.6.10",
-         "chronos >= 4.0.3",
+         "chronos >= 4.0.3 & <5.0.0",
          "chronicles",
          "metrics",
          "results",
