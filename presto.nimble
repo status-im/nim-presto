@@ -7,7 +7,7 @@ description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
-requires "nim >= 2.0.0",
+requires "nim >= 2.0.10",
          "chronos ^= 4.0.3",
          "chronicles",
          "metrics",
