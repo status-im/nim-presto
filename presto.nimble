@@ -7,8 +7,8 @@ description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
-requires "nim >= 2.0.10",
-         "chronos ^= 4.0.3",
+requires "nim >= 1.6.10",
+         "chronos >= 4.0.3",
          "chronicles",
          "metrics",
          "results",
@@ -29,7 +29,8 @@ proc build(args, path: string) =
 
 proc run(path: string) =
   build " --mm:refc -r", path
-  build " --mm:orc -r", path
+  if (NimMajor, NimMinor) > (1, 6):
+    build " --mm:orc -r", path
 
 task test, "Runs rest tests":
   run "tests/testall"
