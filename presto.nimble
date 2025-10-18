@@ -1,7 +1,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
-version       = "0.1.0"
+version       = "0.1.1"
 author        = "Status Research & Development GmbH"
 description   = "REST API implementation"
 license       = "MIT"
