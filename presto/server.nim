@@ -9,7 +9,7 @@
 
 {.push raises: [].}
 
-import std/[options, json, strutils]
+import std/[options, json]
 import chronos, chronos/apps/http/httpserver
 import chronicles
 import results
