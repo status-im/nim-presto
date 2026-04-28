@@ -29,6 +29,12 @@ when defined(metrics):
                "Time taken to prepare response",
                labels = ["endpoint"]
 
+  declareHistogram presto_server_prepare_response_duration_seconds,
+                   "Histogram of HTTP response preparation duration, in seconds",
+                   labels = ["endpoint"],
+                   buckets = [0.01, 0.025, 0.05, 0.1, 0.25,
+                              0.5, 1, 2.5, 5, 10, Inf]
+
 proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
      async: (raises: [CancelledError, HttpTransportError, HttpProtocolError,
                       RestBadRequestError]).} =
@@ -80,12 +86,18 @@ when defined(metrics):
       let endpoint = $route.routePath
       presto_server_prepare_response_time.set(duration.milliseconds(),
                                               @[endpoint])
+      let seconds = float64(duration.milliseconds()) / 1000.0
+      presto_server_prepare_response_duration_seconds.observe(seconds,
+                                                             @[endpoint])
 
   proc processMetrics(route: RestRoute, duration: Duration) =
     if RestServerMetricsType.Response in route.metrics:
       let endpoint = $route.routePath
       presto_server_prepare_response_time.set(duration.milliseconds(),
                                               @[endpoint])
+      let seconds = float64(duration.milliseconds()) / 1000.0
+      presto_server_prepare_response_duration_seconds.observe(seconds,
+                                                             @[endpoint])
 
 proc processRestRequest*[T](
        server: T,
