@@ -7,13 +7,13 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import std/[macros, options, uri, sequtils]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpclient]
 import chronicles except error
 import httputils, stew/base10
-import "."/[segpath, common, macrocommon, agent]
+import ./[segpath, common, macrocommon, agent]
 export chronos, httpclient, httptable, httpcommon, options, agent, httputils
 export SocketFlags
 
@@ -119,18 +119,18 @@ chronicles.expandIt(HttpAddress):
 chronicles.formatIt(HttpClientConnectionRef):
   if isNil(it): Base10.toString(0'u64) else: Base10.toString(it.id)
 
-proc `==`*(x, y: RestStatus): bool {.borrow.}
-proc `<=`*(x, y: RestStatus): bool {.borrow.}
-proc `<`*(x, y: RestStatus): bool {.borrow.}
-proc `$`*(x: RestStatus): string {.borrow.}
+func `==`*(x, y: RestStatus): bool {.borrow.}
+func `<=`*(x, y: RestStatus): bool {.borrow.}
+func `<`*(x, y: RestStatus): bool {.borrow.}
+func `$`*(x: RestStatus): string {.borrow.}
 
-proc `$`*(x: Opt[ContentTypeData]): string =
+func `$`*(x: Opt[ContentTypeData]): string =
   if x.isSome():
     $x.get()
   else:
     "<missing>"
 
-proc `==`*(a: Opt[ContentTypeData], b: MediaType): bool =
+func `==`*(a: Opt[ContentTypeData], b: MediaType): bool =
   if a.isNone():
     false
   else:
@@ -160,7 +160,7 @@ proc new*(t: typedesc[RestClientRef],
   uri.query = ""
   uri.anchor = ""
 
-  let address = session.getAddress(uri).valueOr:
+  let address = getHttpAddress(uri).valueOr:
     return err("Unable to resolve remote hostname")
 
   ok(RestClientRef(session: session, address: address, agent: userAgent,
@@ -215,7 +215,7 @@ proc new*(t: typedesc[RestClientRef],
 proc closeWait*(client: RestClientRef) {.async: (raises: []).} =
   await client.session.closeWait()
 
-proc toHttpFlags(flags: RestConnectionFlags): set[HttpClientRequestFlag] =
+func toHttpFlags(flags: RestConnectionFlags): set[HttpClientRequestFlag] =
   var res: set[HttpClientRequestFlag]
   if RestConnectionFlag.Dedicated in flags:
     res.incl(HttpClientRequestFlag.DedicatedConnection)
@@ -283,7 +283,7 @@ proc createGetRequest(client: RestClientRef, endpoint: Opt[string],
   HttpClientRequestRef.new(client.session, address, httpMethod,
                            headers = headers, flags = flags.toHttpFlags())
 
-proc getEndpointOrDefault(prc: NimNode,
+func getEndpointOrDefault(prc: NimNode,
                           default: string): string {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
@@ -298,7 +298,7 @@ proc getEndpointOrDefault(prc: NimNode,
         return node[1].strVal
   return default
 
-proc getMethodOrDefault(prc: NimNode,
+func getMethodOrDefault(prc: NimNode,
                         default: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
@@ -307,7 +307,7 @@ proc getMethodOrDefault(prc: NimNode,
         return copyNimTree(node[1])
   return default
 
-proc getAcceptOrDefault(prc: NimNode,
+func getAcceptOrDefault(prc: NimNode,
                         default: string): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
@@ -323,7 +323,7 @@ proc getAcceptOrDefault(prc: NimNode,
           return copyNimTree(node[1])
   return newStrLitNode(default)
 
-proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
+func getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if (node.kind == nnkIdent) and (node.strVal == "async"):
@@ -334,7 +334,7 @@ proc getAsyncPragma(prc: NimNode): NimNode {.compileTime.} =
       # {.async: (...).} pragma.
       return node
 
-proc getMetricsPragmaOrDefault(prc: NimNode,
+func getMetricsPragmaOrDefault(prc: NimNode,
                                default: string): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
@@ -357,7 +357,7 @@ proc getMetricsPragmaOrDefault(prc: NimNode,
   newCall(newDotExpr(newIdentNode("Opt"), newIdentNode("none")),
           newIdentNode("string"))
 
-proc getMetricsTypePragmas(prc: NimNode): NimNode {.compileTime.} =
+func getMetricsTypePragmas(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
@@ -365,7 +365,7 @@ proc getMetricsTypePragmas(prc: NimNode): NimNode {.compileTime.} =
         return copyNimTree(node[1])
   newIdentNode("RestClientMetricsAllTypes")
 
-proc getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
+func getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
   let pragmaNode = prc.pragma()
   for node in pragmaNode.items():
     if node.kind == nnkExprColonExpr:
@@ -373,7 +373,7 @@ proc getConnectionPragma(prc: NimNode): NimNode {.compileTime.} =
         return copyNimTree(node[1])
   newTree(nnkCurly)
 
-proc raiseRestEncodingStringError*(field: static string) {.
+func raiseRestEncodingStringError*(field: static string) {.
      noreturn, noinline, raises: [RestEncodingError].} =
   var msg = "Unable to encode object to string, field "
   msg.add("[")
@@ -383,7 +383,7 @@ proc raiseRestEncodingStringError*(field: static string) {.
   error.field = field
   raise error
 
-proc raiseRestEncodingBytesError*(field: static string) {.
+func raiseRestEncodingBytesError*(field: static string) {.
      noreturn, noinline, raises: [RestEncodingError].} =
   var msg = "Unable to encode object to bytes, field "
   msg.add("[")
@@ -393,7 +393,7 @@ proc raiseRestEncodingBytesError*(field: static string) {.
   error.field = field
   raise error
 
-proc raiseRestCommunicationError*(exc: ref HttpError) {.
+func raiseRestCommunicationError*(exc: ref HttpError) {.
      noreturn, noinline, raises: [RestCommunicationError].} =
   var msg = "Communication failed while sending/receiving request"
   msg.add(", http error [")
@@ -404,7 +404,7 @@ proc raiseRestCommunicationError*(exc: ref HttpError) {.
   error.exc = exc
   raise error
 
-proc raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
+func raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
      noreturn, noinline, raises: [RestCommunicationError].} =
   var msg = "Communication failed while sending request's body"
   msg.add(", stream error [")
@@ -415,7 +415,7 @@ proc raiseRestCommunicationError*(exc: ref AsyncStreamError) {.
   error.exc = exc
   raise error
 
-proc raiseRestResponseError*(resp: RestPlainResponse) {.
+func raiseRestResponseError*(resp: RestPlainResponse) {.
      noreturn, noinline, raises: [RestResponseError].} =
   var msg = "Unsuccessfull response received"
   msg.add(", http code [")
@@ -427,13 +427,13 @@ proc raiseRestResponseError*(resp: RestPlainResponse) {.
   error.message = bytesToString(resp.data)
   raise error
 
-proc raiseRestRedirectionError*(msg: string) {.
+func raiseRestRedirectionError*(msg: string) {.
      noreturn, noinline, raises: [RestRedirectionError].} =
   var msg = "Unable to follow redirect location, "
   msg.add(msg)
   raise (ref RestRedirectionError)(msg: msg)
 
-proc raiseRestDecodingBytesError*(message: cstring) {.
+func raiseRestDecodingBytesError*(message: cstring) {.
      noreturn, noinline, raises: [RestDecodingError].} =
   var msg = "Unable to decode REST response"
   msg.add(", error [")
@@ -441,10 +441,10 @@ proc raiseRestDecodingBytesError*(message: cstring) {.
   msg.add("]")
   raise (ref RestDecodingError)(msg: msg)
 
-proc newArrayNode(nodes: openArray[NimNode]): NimNode =
+func newArrayNode(nodes: openArray[NimNode]): NimNode =
   newTree(nnkBracket, @nodes)
 
-proc isPostMethod(node: NimNode): bool {.compileTime.} =
+func isPostMethod(node: NimNode): bool {.compileTime.} =
   let methodName =
     if node.kind == nnkDotExpr:
       node.expectLen(2)
@@ -462,7 +462,7 @@ proc isPostMethod(node: NimNode): bool {.compileTime.} =
   else:
     false
 
-proc transformProcDefinition(prc: NimNode, clientIdent: NimNode,
+func transformProcDefinition(prc: NimNode, clientIdent: NimNode,
                              contentIdent: NimNode,
                              acceptIdent: NimNode,
                              extraHeadersIdent: NimNode,
@@ -864,7 +864,7 @@ proc requestWithBody*(
       closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
 
-proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
+func restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   if prc.kind notin {nnkProcDef}:
     error("Cannot transform this node kind into an REST client procedure." &
           " Only `proc` definition expected.")
