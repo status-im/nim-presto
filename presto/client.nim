@@ -864,7 +864,7 @@ proc requestWithBody*(
       closeObjects(writer, request, redirect, response)
       raiseRestCommunicationError(exc)
 
-func restSingleProc(prc: NimNode): NimNode {.compileTime.} =
+proc restSingleProc(prc: NimNode): NimNode {.compileTime.} =
   if prc.kind notin {nnkProcDef}:
     error("Cannot transform this node kind into an REST client procedure." &
           " Only `proc` definition expected.")
