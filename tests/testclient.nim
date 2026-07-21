@@ -984,8 +984,10 @@ suite "REST API client test suite":
       return RestApiResponse.error(Http411, "ERROR-411")
     router.api(MethodGet, "/test/success/200") do () -> RestApiResponse:
       return RestApiResponse.response("SUCCESS-200", Http200, "text/plain")
+    router.api(MethodGet, "/test/success/201") do () -> RestApiResponse:
+      return RestApiResponse.response("201", Http201, "text/integer")
     router.api(MethodGet, "/test/success/204") do () -> RestApiResponse:
-      return RestApiResponse.response("204", Http204, "text/integer")
+      return RestApiResponse.response(Http204)
     router.api(MethodGet, "/test/headers/200") do () -> RestApiResponse:
       let headers = HttpTable.init([
         ("header1", "value1"), ("header2", "value2")
@@ -1004,8 +1006,10 @@ suite "REST API client test suite":
     proc testStatus1(): RestStatus {.rest, endpoint: "/test/error/410".}
     proc testStatus2(): RestStatus {.rest, endpoint: "/test/error/411".}
     proc testStatus3(): RestStatus {.rest, endpoint: "/test/success/200".}
-    proc testStatus4(): RestStatus {.rest, endpoint: "/test/success/204".}
+    proc testStatus4(): RestStatus {.rest, endpoint: "/test/success/201".}
     proc testStatus5(): RestStatus {.rest, endpoint: "/test/noresource".}
+    proc testStatusNoContent(): RestStatus {.
+         rest, endpoint: "/test/success/204".}
 
     proc testPlainResponse1(): RestPlainResponse {.
          rest, endpoint: "/test/error/410".}
@@ -1014,13 +1018,15 @@ suite "REST API client test suite":
     proc testPlainResponse3(): RestPlainResponse {.
          rest, endpoint: "/test/success/200".}
     proc testPlainResponse4(): RestPlainResponse {.
-         rest, endpoint: "/test/success/204".}
+         rest, endpoint: "/test/success/201".}
     proc testPlainResponse5(): RestPlainResponse {.rest,
          endpoint: "/test/noresource".}
     proc testPlainResponse6(): RestPlainResponse {.rest,
          endpoint: "/test/headers/200".}
     proc testPlainResponse7(): RestPlainResponse {.rest,
          endpoint: "/test/headers/201".}
+    proc testPlainResponseNoContent(): RestPlainResponse {.
+         rest, endpoint: "/test/success/204".}
 
     proc testGenericResponse1(): RestResponse[string] {.
          rest, endpoint: "/test/error/410".}
@@ -1029,7 +1035,7 @@ suite "REST API client test suite":
     proc testGenericResponse3(): RestResponse[string] {.
          rest, endpoint: "/test/success/200".}
     proc testGenericResponse4(): RestResponse[int] {.
-         rest, endpoint: "/test/success/204".}
+         rest, endpoint: "/test/success/201".}
     proc testGenericResponse5(): RestResponse[string] {.
          rest, endpoint: "/test/noresource".}
 
@@ -1040,13 +1046,15 @@ suite "REST API client test suite":
     let res3 = await client.testStatus3()
     let res4 = await client.testStatus4()
     let res5 = await client.testStatus5()
+    let statusNoContent = await client.testStatusNoContent()
 
     check:
       res1 == RestStatus(410)
       res2 == RestStatus(411)
       res3 == RestStatus(200)
-      res4 == RestStatus(204)
+      res4 == RestStatus(201)
       res5 == RestStatus(404)
+      statusNoContent == RestStatus(204)
 
     let res6 = await client.testPlainResponse1()
     let res7 = await client.testPlainResponse2()
@@ -1055,6 +1063,7 @@ suite "REST API client test suite":
     let res10 = await client.testPlainResponse5()
     let res100 = await client.testPlainResponse6()
     let res101 = await client.testPlainResponse7()
+    let plainResponseNoContent = await client.testPlainResponseNoContent()
 
     check:
       res6.status == 410
@@ -1066,10 +1075,12 @@ suite "REST API client test suite":
       res8.status == 200
       res8.contentType == MediaType.init("text/plain")
       bytesToString(res8.data) == "SUCCESS-200"
-      res9.status == 204
+      res9.status == 201
       res9.contentType == MediaType.init("text/integer")
-      bytesToString(res9.data) == "204"
+      bytesToString(res9.data) == "201"
       res10.status == 404
+      plainResponseNoContent.status == 204
+      plainResponseNoContent.data.len == 0
     check:
       res100.status == 200
       res100.contentType == MediaType.init("text/plain")
@@ -1098,9 +1109,9 @@ suite "REST API client test suite":
       res13.status == 200
       res13.contentType == MediaType.init("text/plain")
       res13.data == "SUCCESS-200"
-      res14.status == 204
+      res14.status == 201
       res14.contentType == MediaType.init("text/integer")
-      res14.data == 204
+      res14.data == 201
       res15.status == 404
 
     await client.closeWait()
