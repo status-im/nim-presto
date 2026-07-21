@@ -636,36 +636,33 @@ proc processRestResponse(
      async: (raises: [CancelledError, RestCommunicationError]).} =
   let address = response.address
   try:
-    let res =
-      block:
-        let
-          status = response.status
-          contentType = response.contentType
-          data =
-            block:
-              var default: seq[byte]
-              if RestRequestFlag.ConsumeBody in flags:
-                discard await response.consumeBody()
-                default
-              else:
-                await response.getBodyBytes()
-        debug "Received REST response body from remote server",
-              address, contentType = $contentType, size = len(data)
+    var
+      status = response.status
+      contentType = response.contentType
+      data =
+        block:
+          var default: seq[byte]
+          if RestRequestFlag.ConsumeBody in flags:
+            discard await response.consumeBody()
+            default
+          else:
+            await response.getBodyBytes()
+    debug "Received REST response body from remote server",
+          address, contentType = $contentType, size = len(data)
 
-        when defined(metrics):
-          if endpoint.isSome():
-            let ep = endpoint.get()
-            if RestClientMetricsType.ResponseTime in metricsTypes:
-              let duration = response.duration
-              presto_client_response_time.set(
-                float64(duration.milliseconds()), @[ep])
-            if RestClientMetricsType.Status in metricsTypes:
-              processStatusMetrics(ep, response.status)
+    when defined(metrics):
+      if endpoint.isSome():
+        let ep = endpoint.get()
+        if RestClientMetricsType.ResponseTime in metricsTypes:
+          let duration = response.duration
+          presto_client_response_time.set(
+            float64(duration.milliseconds()), @[ep])
+        if RestClientMetricsType.Status in metricsTypes:
+          processStatusMetrics(ep, response.status)
 
-        await response.closeWait()
-        RestPlainResponse(status: status, contentType: contentType,
-                          headers: response.headers, data: data)
-    return res
+    await response.closeWait()
+    RestPlainResponse(status: status, contentType: contentType,
+                      headers: response.headers, data: move(data))
   except CancelledError as exc:
     debug "REST client was interrupted while reading response",
           address
