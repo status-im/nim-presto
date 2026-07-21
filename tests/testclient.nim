@@ -984,8 +984,8 @@ suite "REST API client test suite":
       return RestApiResponse.error(Http411, "ERROR-411")
     router.api(MethodGet, "/test/success/200") do () -> RestApiResponse:
       return RestApiResponse.response("SUCCESS-200", Http200, "text/plain")
-    router.api(MethodGet, "/test/success/204") do () -> RestApiResponse:
-      return RestApiResponse.response("204", Http204, "text/integer")
+    router.api(MethodGet, "/test/success/int") do () -> RestApiResponse:
+      return RestApiResponse.response("204", Http200, "text/integer")
     router.api(MethodGet, "/test/headers/200") do () -> RestApiResponse:
       let headers = HttpTable.init([
         ("header1", "value1"), ("header2", "value2")
@@ -1004,7 +1004,7 @@ suite "REST API client test suite":
     proc testStatus1(): RestStatus {.rest, endpoint: "/test/error/410".}
     proc testStatus2(): RestStatus {.rest, endpoint: "/test/error/411".}
     proc testStatus3(): RestStatus {.rest, endpoint: "/test/success/200".}
-    proc testStatus4(): RestStatus {.rest, endpoint: "/test/success/204".}
+    proc testStatus4(): RestStatus {.rest, endpoint: "/test/success/int".}
     proc testStatus5(): RestStatus {.rest, endpoint: "/test/noresource".}
 
     proc testPlainResponse1(): RestPlainResponse {.
@@ -1014,7 +1014,7 @@ suite "REST API client test suite":
     proc testPlainResponse3(): RestPlainResponse {.
          rest, endpoint: "/test/success/200".}
     proc testPlainResponse4(): RestPlainResponse {.
-         rest, endpoint: "/test/success/204".}
+         rest, endpoint: "/test/success/int".}
     proc testPlainResponse5(): RestPlainResponse {.rest,
          endpoint: "/test/noresource".}
     proc testPlainResponse6(): RestPlainResponse {.rest,
@@ -1029,7 +1029,7 @@ suite "REST API client test suite":
     proc testGenericResponse3(): RestResponse[string] {.
          rest, endpoint: "/test/success/200".}
     proc testGenericResponse4(): RestResponse[int] {.
-         rest, endpoint: "/test/success/204".}
+         rest, endpoint: "/test/success/int".}
     proc testGenericResponse5(): RestResponse[string] {.
          rest, endpoint: "/test/noresource".}
 
@@ -1045,7 +1045,7 @@ suite "REST API client test suite":
       res1 == RestStatus(410)
       res2 == RestStatus(411)
       res3 == RestStatus(200)
-      res4 == RestStatus(204)
+      res4 == RestStatus(200)
       res5 == RestStatus(404)
 
     let res6 = await client.testPlainResponse1()
@@ -1066,7 +1066,7 @@ suite "REST API client test suite":
       res8.status == 200
       res8.contentType == MediaType.init("text/plain")
       bytesToString(res8.data) == "SUCCESS-200"
-      res9.status == 204
+      res9.status == 200
       res9.contentType == MediaType.init("text/integer")
       bytesToString(res9.data) == "204"
       res10.status == 404
@@ -1098,7 +1098,7 @@ suite "REST API client test suite":
       res13.status == 200
       res13.contentType == MediaType.init("text/plain")
       res13.data == "SUCCESS-200"
-      res14.status == 204
+      res14.status == 200
       res14.contentType == MediaType.init("text/integer")
       res14.data == 204
       res15.status == 404
