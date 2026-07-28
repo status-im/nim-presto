@@ -620,3 +620,20 @@ suite "REST API router & macro tests":
     check:
       r1.kind == RestApiResponseKind.Content
       bytesToString(r1.content.data) == "ok-opt"
+
+  test "Opt[ContentBody] as body parameter test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost,
+               "/test/opt_body/1/{smp1}") do (
+      smp1: int, body: Opt[ContentBody]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let cbody = body.get()
+        if (s1 == 333333) and (bytesToString(cbody.data) == "bodytest"):
+          return RestApiResponse.response("ok-opt-body",
+                                           contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodPost,
+      "http://l.to/test/opt_body/1/333333", "bodytest")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt-body"
