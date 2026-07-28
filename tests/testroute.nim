@@ -637,3 +637,25 @@ suite "REST API router & macro tests":
     check:
       r1.kind == RestApiResponseKind.Content
       bytesToString(r1.content.data) == "ok-opt-body"
+
+  test "Opt[T] and Opt[ContentBody] combined test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost,
+               "/test/opt_combined/1/{smp1}") do (
+      smp1: int, opt1: Opt[int], opt2: Opt[string],
+      body: Opt[ContentBody]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let o1 = opt1.get().get()
+        let o2 = opt2.get().get()
+        let cbody = body.get()
+        if (s1 == 444444) and (o1 == 555555) and (o2 == "combined") and
+           (bytesToString(cbody.data) == "combinedbody"):
+          return RestApiResponse.response("ok-opt-combined",
+                                           contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodPost,
+      "http://l.to/test/opt_combined/1/444444" &
+      "?opt1=555555&opt2=combined", "combinedbody")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt-combined"
