@@ -301,7 +301,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
   let (bodyArgument, respArgument, optionalArguments, pathArguments) =
     block:
       var
-        bodyRes: NimNode = nil
+        bodyRes: tuple[name: NimNode, ntype: NimNode]
         respRes: NimNode = nil
         optionalRes: seq[tuple[name, ntype: NimNode]]
         pathRes: seq[tuple[name, ntype: NimNode]]
@@ -328,8 +328,8 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
                   paramName)
 
           if isContentBodyArg(paramType):
-            if isNil(bodyRes):
-              bodyRes = paramName
+            if isNil(bodyRes.name):
+              bodyRes = (paramName, paramType)
             else:
               error("There should be only one argument of " &
                     paramType.strVal & " type", paramType)
