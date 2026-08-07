@@ -25,9 +25,12 @@ when defined(metrics):
                "Number of HTTP(s) requests to unrecognized API endpoints"
   declareGauge presto_server_invalid_requests_count,
                "Number of HTTP(s) requests invalid API endpoints"
-  declareGauge presto_server_prepare_response_time,
-               "Time taken to prepare response",
-               labels = ["endpoint"]
+  declareCounter presto_server_prepare_responses,
+                 "Number of prepared responses",
+                 labels = ["endpoint"]
+  declareCounter presto_server_prepare_response_duration_seconds,
+                 "Total time taken to prepare responses",
+                 labels = ["endpoint"]
 
 proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
      async: (raises: [CancelledError, HttpTransportError, HttpProtocolError,
@@ -65,6 +68,12 @@ proc mergeHttpHeaders(a: var HttpTable, b: HttpTable) =
         a.add(key, item)
 
 when defined(metrics):
+  proc processResponseMetrics(route: RestRoute, duration: Duration) =
+    let endpoint = $route.routePath
+    presto_server_prepare_responses.inc(1, @[endpoint])
+    presto_server_prepare_response_duration_seconds.inc(
+      float64(duration.milliseconds()) / 1000.0, @[endpoint])
+
   proc processStatusMetrics(route: RestRoute, code: HttpCode) =
     if RestServerMetricsType.Status in route.metrics:
       let
@@ -77,15 +86,11 @@ when defined(metrics):
     if RestServerMetricsType.Status in route.metrics:
       processStatusMetrics(route, code)
     if RestServerMetricsType.Response in route.metrics:
-      let endpoint = $route.routePath
-      presto_server_prepare_response_time.set(duration.milliseconds(),
-                                              @[endpoint])
+      processResponseMetrics(route, duration)
 
   proc processMetrics(route: RestRoute, duration: Duration) =
     if RestServerMetricsType.Response in route.metrics:
-      let endpoint = $route.routePath
-      presto_server_prepare_response_time.set(duration.milliseconds(),
-                                              @[endpoint])
+      processResponseMetrics(route, duration)
 
 proc processRestRequest*[T](
        server: T,
