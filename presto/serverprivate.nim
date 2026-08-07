@@ -16,15 +16,15 @@ import "."/[route, common, segpath, servercommon]
 when defined(metrics):
   import metrics
 
-  declareGauge presto_server_response_status_count,
-               "Number of HTTP server responses with specific status",
-               labels = ["endpoint", "status"]
-  declareGauge presto_server_processed_request_count,
-               "Number of HTTP(s) processed requests"
-  declareGauge presto_server_missing_requests_count,
-               "Number of HTTP(s) requests to unrecognized API endpoints"
-  declareGauge presto_server_invalid_requests_count,
-               "Number of HTTP(s) requests invalid API endpoints"
+  declareCounter presto_server_responses,
+                 "Number of HTTP server responses with specific status",
+                 labels = ["endpoint", "status"]
+  declareCounter presto_server_processed_requests,
+                 "Number of HTTP(s) processed requests"
+  declareCounter presto_server_missing_requests,
+                 "Number of HTTP(s) requests to unrecognized API endpoints"
+  declareCounter presto_server_invalid_requests,
+                 "Number of HTTP(s) requests invalid API endpoints"
   declareCounter presto_server_prepare_responses,
                  "Number of prepared responses",
                  labels = ["endpoint"]
@@ -79,7 +79,7 @@ when defined(metrics):
       let
         endpoint = $route.routePath
         scode = Base10.toString(uint64(toInt(code)))
-      presto_server_response_status_count.inc(1, @[endpoint, scode])
+      presto_server_responses.inc(1, @[endpoint, scode])
 
   proc processStatusMetrics(route: RestRoute, code: HttpCode,
                             duration: Duration) =
@@ -139,7 +139,7 @@ proc processRestRequest*[T](
               meth = $request.meth, uri = $request.uri
 
         when defined(metrics):
-          presto_server_invalid_requests_count.inc()
+          presto_server_invalid_requests.inc()
 
         sresponse(request, Http400, RestRequestError.Invalid)
 
@@ -156,7 +156,7 @@ proc processRestRequest*[T](
               peer = $request.remoteAddress(), uri = $request.uri
 
         when defined(metrics):
-          presto_server_missing_requests_count.inc()
+          presto_server_missing_requests.inc()
 
         sresponse(request, Http404, RestRequestError.NotFound)
   let
@@ -165,7 +165,7 @@ proc processRestRequest*[T](
     queryParams = request.query
 
   when defined(metrics):
-    presto_server_processed_request_count.inc()
+    presto_server_processed_requests.inc()
 
   let optBody =
     if RestRouterFlag.Raw notin route.flags:
