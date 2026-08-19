@@ -29,21 +29,38 @@ when defined(metrics):
                "Time taken to prepare response",
                labels = ["endpoint"]
 
-proc getContentBody*(r: HttpRequestRef): Future[Option[ContentBody]] {.
+proc noneBody*(B: typedesc[Option[ContentBody]]): Option[ContentBody] =
+  none[ContentBody]()
+
+proc noneBody*(B: typedesc[Opt[ContentBody]]): Opt[ContentBody] =
+  Opt.none(ContentBody)
+
+proc someBody*(B: typedesc[Option[ContentBody]],
+               body: ContentBody): Option[ContentBody] =
+  some(body)
+
+proc someBody*(B: typedesc[Opt[ContentBody]],
+               body: ContentBody): Opt[ContentBody] =
+  Opt.some(body)
+
+proc getContentBody*[B: BodyType](route: RestRouteGen[B],
+                                  r: HttpRequestRef): Future[B] {.
      async: (raises: [CancelledError, HttpTransportError, HttpProtocolError,
                       RestBadRequestError]).} =
   if r.meth notin PostMethods:
-    return none[ContentBody]()
+    return B.noneBody()
   if not(r.hasBody()):
-    return none[ContentBody]()
+    return B.noneBody()
   if (HttpRequestFlags.BoundBody in r.requestFlags) and (r.contentLength == 0):
-    return none[ContentBody]()
+    return B.noneBody()
   if r.contentTypeData.isNone():
     raise newException(RestBadRequestError,
                        "Incorrect/missing Content-Type header")
   let data = await r.getBody()
-  some[ContentBody](
-    ContentBody(contentType: r.contentTypeData.get(), data: data))
+  B.someBody(ContentBody(contentType: r.contentTypeData.get(), data: data))
+
+proc emptyBody*[B: BodyType](route: RestRouteGen[B]): B =
+  B.noneBody()
 
 proc originsMatch(requestOrigin, allowedOrigin: string): bool =
   if allowedOrigin.startsWith("http://") or
@@ -65,15 +82,16 @@ proc mergeHttpHeaders(a: var HttpTable, b: HttpTable) =
         a.add(key, item)
 
 when defined(metrics):
-  proc processStatusMetrics(route: RestRoute, code: HttpCode) =
+  proc processStatusMetrics[B: BodyType](route: RestRouteGen[B],
+      code: HttpCode) =
     if RestServerMetricsType.Status in route.metrics:
       let
         endpoint = $route.routePath
         scode = Base10.toString(uint64(toInt(code)))
       presto_server_response_status_count.inc(1, @[endpoint, scode])
 
-  proc processStatusMetrics(route: RestRoute, code: HttpCode,
-                            duration: Duration) =
+  proc processStatusMetrics[B: BodyType](route: RestRouteGen[B],
+      code: HttpCode, duration: Duration) =
     if RestServerMetricsType.Status in route.metrics:
       processStatusMetrics(route, code)
     if RestServerMetricsType.Response in route.metrics:
@@ -81,7 +99,8 @@ when defined(metrics):
       presto_server_prepare_response_time.set(duration.milliseconds(),
                                               @[endpoint])
 
-  proc processMetrics(route: RestRoute, duration: Duration) =
+  proc processMetrics[B: BodyType](route: RestRouteGen[B],
+      duration: Duration) =
     if RestServerMetricsType.Response in route.metrics:
       let endpoint = $route.routePath
       presto_server_prepare_response_time.set(duration.milliseconds(),
@@ -109,7 +128,7 @@ proc processRestRequest*[T](
 
   if rf.isErr():
     return
-      when T is RestServerMiddlewareRef:
+      when T is HttpServerMiddlewareRef:
         await server.nextHandler(rf)
       else:
         let httpErr = rf.error
@@ -127,7 +146,7 @@ proc processRestRequest*[T](
 
   if sres.isErr():
     return
-      when T is RestServerMiddlewareRef:
+      when T is HttpServerMiddlewareRef:
         await server.nextHandler(rf)
       else:
         debug "Received invalid request", peer = $request.remoteAddress(),
@@ -144,7 +163,7 @@ proc processRestRequest*[T](
   let rres = server.router.getRoute(sres.get())
   if rres.isNone():
     return
-      when T is RestServerMiddlewareRef:
+      when T is HttpServerMiddlewareRef:
         await server.nextHandler(rf)
       else:
         debug "Could not find requested resource", meth = $request.meth,
@@ -165,7 +184,7 @@ proc processRestRequest*[T](
   let optBody =
     if RestRouterFlag.Raw notin route.flags:
       try:
-        await request.getContentBody()
+        await getContentBody(route, request)
       except HttpTransportError as exc:
         debug "Unable to receive request body", uri = $request.uri,
               peer = $request.remoteAddress(), meth = $request.meth,
@@ -197,7 +216,7 @@ proc processRestRequest*[T](
         return sresponse(request, Http400,
                          RestRequestError.InvalidContentType)
     else:
-      none[ContentBody]()
+      emptyBody(route)
 
   debug "Serving API request", peer = $request.remoteAddress(),
         meth = $request.meth, uri = $request.uri,

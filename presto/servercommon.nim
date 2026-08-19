@@ -12,8 +12,9 @@
 import std/options
 import chronos, chronos/apps/http/httpserver
 import chronicles
+import results
 import "."/[common, route]
-export chronicles, options, httpserver
+export chronicles, options, results, httpserver
 
 chronicles.formatIt(HttpTable):
   var res = newSeq[string]()
@@ -23,6 +24,13 @@ chronicles.formatIt(HttpTable):
   "[" & res.join(", ") & "]"
 
 chronicles.formatIt(Option[ContentBody]):
+  if it.isSome():
+    let body = it.get()
+    "(" & $body.contentType & ", " & $len(body.data) & " bytes)"
+  else:
+    "(None)"
+
+chronicles.formatIt(Opt[ContentBody]):
   if it.isSome():
     let body = it.get()
     "(" & $body.contentType & ", " & $len(body.data) & " bytes)"
@@ -46,7 +54,9 @@ type
     request: HttpRequestRef): Future[HttpResponseRef] {.
       async: (raises: [CancelledError]).}
 
-  RestServerMiddlewareRef* = ref object of HttpServerMiddlewareRef
-    router*: RestRouter
+  RestServerMiddlewareRefGen*[B: BodyType] = ref object of HttpServerMiddlewareRef
+    router*: RestRouterGen[B]
     errorHandler*: RestRequestErrorHandler
     nextHandler*: HttpProcessCallback2
+
+  RestServerMiddlewareRef* = RestServerMiddlewareRefGen[Option[ContentBody]]
