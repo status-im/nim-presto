@@ -260,7 +260,7 @@ proc getParamsList*[B: BodyType](route: RestRouteGen[B]): seq[string] =
     res.add(item)
   res
 
-macro redirect*(router: RestRouter, meth: static[HttpMethod],
+macro redirect*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                 fromPath: static[string], toPath: static[string]): untyped =
   ## Define REST API endpoint which redirects request to different compatible
   ## endpoint ("/somecall" will be redirected to "/api/somecall").
@@ -509,42 +509,42 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     echo "\n", path, ": ", repr(res)
   return res
 
-macro api*(router: RestRouter, meth: static[HttpMethod],
+macro api*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {}, {}, false, body)
 
-macro rawApi*(router: RestRouter, meth: static[HttpMethod],
+macro rawApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, false, body)
 
-macro metricsApi*(router: RestRouter, meth: static[HttpMethod],
+macro metricsApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                   path: static[string],
                   metrics: static[set[RestServerMetricsType]],
                   body: untyped): untyped =
   processApiCall(router, meth, path, {}, metrics, false, body)
 
-macro rawMetricsApi*(router: RestRouter, meth: static[HttpMethod],
+macro rawMetricsApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                      path: static[string],
                      metrics: static[set[RestServerMetricsType]],
                      body: untyped): untyped =
   processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, false, body)
 
-macro api2*(router: RestRouter, meth: static[HttpMethod],
+macro api2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {}, {}, true, body)
 
-macro rawApi2*(router: RestRouter, meth: static[HttpMethod],
+macro rawApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, true, body)
 
-macro metricsApi2*(router: RestRouter, meth: static[HttpMethod],
+macro metricsApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                   path: static[string],
                   metrics: static[set[RestServerMetricsType]],
                   body: untyped): untyped =
-  processApiCall(router, meth, path, {}, metrics, false, body)
+  processApiCall(router, meth, path, {}, metrics, true, body)
 
-macro rawMetricsApi2*(router: RestRouter, meth: static[HttpMethod],
+macro rawMetricsApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                      path: static[string],
                      metrics: static[set[RestServerMetricsType]],
                      body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, true, body)
