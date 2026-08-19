@@ -326,16 +326,18 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
 
   # Validating and retrieve arguments.
   #
-  # `bodyArgument` will hold name of `Option[ContentBody]` argument which
+  # `bodyArgument` will hold name of `Option|Opt[ContentBody]` argument which
   # used to obtain request's content body.
   # `respArgument` will hold name of `HttpResponseRef` argument which used
   # to manipulate response.
   # `optionalArguments` will hold sequence of all the optional arguments.
   # `pathArguments` will hold sequence of all the path (required) arguments.
-  let (bodyArgument, respArgument, optionalArguments, pathArguments) =
+  let (bodyArgument, bodyArgType, respArgument,
+       optionalArguments, pathArguments) =
     block:
       var
         bodyRes: NimNode = nil
+        bodyTypeRes: NimNode = nil
         respRes: NimNode = nil
         optionalRes: seq[tuple[name, ntype: NimNode]]
         pathRes: seq[tuple[name, ntype: NimNode]]
@@ -364,6 +366,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           if isContentBodyArg(paramType):
             if isNil(bodyRes):
               bodyRes = paramName
+              bodyTypeRes = paramType
             else:
               error("There should be only one argument of " &
                     paramType.strVal & " type", paramType)
@@ -376,7 +379,14 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           elif isOptionalArg(paramType) or isSequenceArg(paramType):
             optionalRes.add((paramName, paramType))
 
-      (bodyRes, respRes, optionalRes, pathRes)
+      (bodyRes, bodyTypeRes, respRes, optionalRes, pathRes)
+
+  # Validate: the user-declared body argument type must match the router's.
+  if not(isNil(bodyArgType)) and isContentBodyArg(bodyArgType):
+    if not eqIdent(bodyArgType[0], bodyType[0]):
+      error("Body argument type '" & repr(bodyArgType) &
+            "' does not match router body type '" & repr(bodyType) & "'",
+            bodyArgType)
 
   # All "path" arguments should be present
   if len(patterns) != 0:
@@ -410,7 +420,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       var res = newStmtList()
       for (paramName, paramType) in optionalArguments:
         let strName = newStrLitNode($paramName)
-        if isOptionalArg(paramType):
+        if isOptionArg(paramType):
           # Optional arguments which has type `Option[T]`.
           let optType = getOptionType(paramType)
           res.add(quote do:
@@ -419,6 +429,18 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
                 none[Result[`optType`, cstring]]()
               else:
                 some[Result[`optType`, cstring]](
+                  decodeString(`optType`, `queryParams`.getString(`strName`))
+                )
+          )
+        elif isOptArg(paramType):
+          # Optional arguments which has type `Opt[T]`.
+          let optType = getOptionType(paramType)
+          res.add(quote do:
+            let `paramName` {.used.}: Opt[Result[`optType`, cstring]] =
+              if `strName` notin `queryParams`:
+                Opt.none(Result[`optType`, cstring])
+              else:
+                Opt.some(
                   decodeString(`optType`, `queryParams`.getString(`strName`))
                 )
           )
@@ -450,7 +472,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       var res = newStmtList()
       if not(isNil(bodyArgument)):
         res.add(quote do:
-          let `bodyArgument` {.used.}: Option[ContentBody] = `bodyParam`
+          let `bodyArgument` {.used.}: `bodyType` = `bodyParam`
         )
       res
 
@@ -472,7 +494,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           `requestParam`: HttpRequestRef,
           `pathParams`: HttpTable,
           `queryParams`: HttpTable,
-          `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
+          `bodyParam`: `bodyType`): Future[RestApiResponse] {.
           async: (raises: [CancelledError]).} =
         template preferredContentType(
           t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
@@ -491,7 +513,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           `requestParam`: HttpRequestRef,
           `pathParams`: HttpTable,
           `queryParams`: HttpTable,
-          `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
+          `bodyParam`: `bodyType`): Future[RestApiResponse] {.
           async.} =
         template preferredContentType(
           t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
