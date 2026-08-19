@@ -26,6 +26,8 @@ type
 
   SecureRestServer* = SecureRestServerGen[Option[ContentBody]]
   SecureRestServerRef* = SecureRestServerRefGen[Option[ContentBody]]
+  SecureRestServerOpt* = SecureRestServerGen[Opt[ContentBody]]
+  SecureRestServerRefOpt* = SecureRestServerRefGen[Opt[ContentBody]]
 
 proc new*[B: BodyType](t: typedesc[SecureRestServerRefGen[B]],
           router: RestRouterGen[B],

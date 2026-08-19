@@ -60,3 +60,4 @@ type
     nextHandler*: HttpProcessCallback2
 
   RestServerMiddlewareRef* = RestServerMiddlewareRefGen[Option[ContentBody]]
+  RestServerMiddlewareRefOpt* = RestServerMiddlewareRefGen[Opt[ContentBody]]

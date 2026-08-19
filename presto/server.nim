@@ -26,6 +26,8 @@ type
 
   RestServer* = RestServerGen[Option[ContentBody]]
   RestServerRef* = RestServerRefGen[Option[ContentBody]]
+  RestServerOpt* = RestServerGen[Opt[ContentBody]]
+  RestServerRefOpt* = RestServerRefGen[Opt[ContentBody]]
 
 proc new*[B: BodyType](t: typedesc[RestServerRefGen[B]],
           router: RestRouterGen[B],

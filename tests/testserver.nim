@@ -992,7 +992,7 @@ suite "REST API server test suite":
         else:
           return RestApiResponse.error(Http400, "no body")
 
-    var sres = RestServerRefGen[Opt[ContentBody]].new(router, serverAddress)
+    var sres = RestServerRefOpt.new(router, serverAddress)
     let server = sres.get()
     server.start()
     try:
