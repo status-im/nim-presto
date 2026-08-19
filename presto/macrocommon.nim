@@ -54,7 +54,7 @@ proc isKnownType*(typeNode: NimNode, typeNames: varargs[string]): bool =
   typeNode.kind in {nnkIdent, nnkSym} and
   $typeNode in typeNames
 
-proc isBracketExpr(n: NimNode, nodes: varargs[string]): bool =
+proc isBracketExpr*(n: NimNode, nodes: varargs[string]): bool =
   let leadingIdx = if n.kind == nnkBracketExpr:
     0
   elif n.kind == nnkCall and
