@@ -82,13 +82,22 @@ proc init*(t: typedesc[RestRouter],
              routes: initBTree[SegmentedPath, RestRouteItem](),
              allowedOrigin: allowedOrigin)
 
-proc init*(t: typedesc[RestRouteItem],
+proc init*[B: BodyType](t: typedesc[RestRouterGen[B]],
+           patternCallback: PatternCallback,
+           allowedOrigin = none(string)): RestRouterGen[B] =
+  doAssert(not(isNil(patternCallback)),
+           "Pattern validation callback must not be nil")
+  RestRouterGen[B](patternCallback: patternCallback,
+                   routes: initBTree[SegmentedPath, RestRouteItemGen[B]](),
+                   allowedOrigin: allowedOrigin)
+
+proc init*[B: BodyType](t: typedesc[RestRouteItemGen[B]],
            spath: SegmentedPath, flags: set[RestRouterFlag],
            metrics: set[RestServerMetricsType],
-           handler: RestApiCallback): RestRouteItem =
+           handler: RestApiCallbackGen[B]): RestRouteItemGen[B] =
   proc trampoline(request: HttpRequestRef, pathParams: HttpTable,
                   queryParams: HttpTable,
-                  body: Option[ContentBody]): Future[RestApiResponse] {.
+                  body: B): Future[RestApiResponse] {.
        async: (raises: [CancelledError]).} =
     try:
       await handler(request, pathParams, queryParams, body)
@@ -98,35 +107,36 @@ proc init*(t: typedesc[RestRouteItem],
       RestApiResponse.error(exc.code, $exc.msg)
     except CatchableError as exc:
       RestApiResponse.error(Http503, $exc.msg)
-  RestRouteItem(kind: RestRouteKind.Handler, path: spath, flags: flags,
-                metrics: metrics, callback: trampoline)
+  RestRouteItemGen[B](kind: RestRouteKind.Handler, path: spath, flags: flags,
+                      metrics: metrics, callback: trampoline)
 
-proc init*(t: typedesc[RestRouteItem],
+proc init*[B: BodyType](t: typedesc[RestRouteItemGen[B]],
            spath: SegmentedPath, flags: set[RestRouterFlag],
            metrics: set[RestServerMetricsType],
-           handler: RestApiCallback2): RestRouteItem =
-  RestRouteItem(kind: RestRouteKind.Handler, path: spath, flags: flags,
-                metrics: metrics, callback: handler)
+           handler: RestApiCallback2Gen[B]): RestRouteItemGen[B] =
+  RestRouteItemGen[B](kind: RestRouteKind.Handler, path: spath, flags: flags,
+                      metrics: metrics, callback: handler)
 
-proc optionsRequestHandler(
+proc optionsRequestHandler[B: BodyType](
        request: HttpRequestRef,
        pathParams: HttpTable,
        queryParams: HttpTable,
-       body: Option[ContentBody]
+       body: B
      ): Future[RestApiResponse] {.async: (raises: [CancelledError]).} =
   RestApiResponse.response("", Http200)
 
-template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
+template addRouteImpl[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+                      path: string,
                       flags: set[RestRouterFlag],
                       metrics: set[RestServerMetricsType],
                       handler: untyped) =
   let
     spath = SegmentedPath.init(meth, path, rr.patternCallback)
     route = rr.routes.getOrDefault(spath,
-                                   RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
   case route.kind
   of RestRouteKind.None:
-    let item = RestRouteItem.init(spath, flags, metrics, handler)
+    let item = RestRouteItemGen[B].init(spath, flags, metrics, handler)
     rr.routes.add(spath, item)
 
     if rr.allowedOrigin.isSome:
@@ -135,10 +145,10 @@ template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
           MethodOptions, path, rr.patternCallback)
       case route.kind
       of RestRouteKind.None:
-        let optionsHandler = RestRouteItem.init(optionsPath,
-                                                {RestRouterFlag.Raw},
-                                                metrics,
-                                                optionsRequestHandler)
+        let optionsHandler = RestRouteItemGen[B].init(optionsPath,
+                                                      {RestRouterFlag.Raw},
+                                                      metrics,
+                                                      optionsRequestHandler[B])
         rr.routes.add(optionsPath, optionsHandler)
       else:
         # This may happen if we use the same URL path in separate GET and
@@ -151,68 +161,73 @@ template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
 # TODO (cheatfate): There is many duplicates in `addRoute` declarations just
 # because https://github.com/nim-lang/Nim/issues/23218 is not solved yet.
 
-proc addRoute*(rr: var RestRouter, meth: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
-               handler: RestApiCallback) =
+               handler: RestApiCallbackGen[B]) =
   addRouteImpl(rr, meth, path, flags, metrics, handler)
 
-proc addRoute*(rr: var RestRouter, meth: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
-               handler: RestApiCallback2) =
+               handler: RestApiCallback2Gen[B]) =
   addRouteImpl(rr, meth, path, flags, metrics, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback) =
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
+               handler: RestApiCallbackGen[B]) =
   addRoute(rr, request, path, {}, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback2) =
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
+               handler: RestApiCallback2Gen[B]) =
   addRoute(rr, request, path, {}, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag],
-               handler: RestApiCallback) =
+               handler: RestApiCallbackGen[B]) =
   addRoute(rr, request, path, flags, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag],
-               handler: RestApiCallback2) =
+               handler: RestApiCallback2Gen[B]) =
   addRoute(rr, request, path, flags, {}, handler)
 
-proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
-                  dstPath: string) =
+proc addRedirect*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+                  srcPath: string, dstPath: string) =
   let
     spath = SegmentedPath.init(request, srcPath, rr.patternCallback)
     dpath = SegmentedPath.init(request, dstPath, rr.patternCallback)
     route = rr.routes.getOrDefault(spath,
-                                   RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
   case route.kind
   of RestRouteKind.None:
-    let item = RestRouteItem(kind: RestRouteKind.Redirect,
-                             path: spath, redirectPath: dpath)
+    let item = RestRouteItemGen[B](kind: RestRouteKind.Redirect,
+                                   path: spath, redirectPath: dpath)
     rr.routes.add(spath, item)
   else:
     raiseAssert("The route is already in the routing table")
 
-proc getRoute*(rr: RestRouter, spath: SegmentedPath): Option[RestRoute] =
+proc getRoute*[B: BodyType](rr: RestRouterGen[B],
+               spath: SegmentedPath): Option[RestRouteGen[B]] =
   var path = spath
   while true:
     let route = rr.routes.getOrDefault(path,
-                                       RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
     case route.kind
     of RestRouteKind.None:
-      return none[RestRoute]()
+      return none[RestRouteGen[B]]()
     of RestRouteKind.Handler:
-      # Route handler was found
-      let item = RestRoute(requestPath: path, routePath: route.path,
-                           flags: route.flags, callback: route.callback,
-                           metrics: route.metrics)
+      let item = RestRouteGen[B](requestPath: path, routePath: route.path,
+                                 flags: route.flags, callback: route.callback,
+                                 metrics: route.metrics)
       return some(item)
     of RestRouteKind.Redirect:
-      # Route redirection was found, so we perform path transformation
       path = rewritePath(route.path, route.redirectPath, path)
 
-iterator params*(route: RestRoute): string =
+iterator params*[B: BodyType](route: RestRouteGen[B]): string =
   var pats = route.routePath.patterns
   while pats != 0'u64:
     let index = firstOne(pats) - 1
@@ -221,7 +236,8 @@ iterator params*(route: RestRoute): string =
     yield route.requestPath.data[index]
     pats = pats and not(1'u64 shl index)
 
-iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
+iterator pairs*[B: BodyType](route: RestRouteGen[B]):
+  tuple[key: string, value: string] {.
   raises: [].} =
   var pats = route.routePath.patterns
   while pats != 0'u64:
@@ -232,13 +248,13 @@ iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
     yield (key, route.requestPath.data[index])
     pats = pats and not(1'u64 shl index)
 
-proc getParamsTable*(route: RestRoute): HttpTable =
+proc getParamsTable*[B: BodyType](route: RestRouteGen[B]): HttpTable =
   var res = HttpTable.init()
   for key, value in route.pairs():
     res.add(key, value)
   res
 
-proc getParamsList*(route: RestRoute): seq[string] =
+proc getParamsList*[B: BodyType](route: RestRouteGen[B]): seq[string] =
   var res: seq[string]
   for item in route.params():
     res.add(item)
@@ -295,6 +311,13 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     queryParams = newIdentNode("queryParams")
     requestParam = newIdentNode("request")
     bodyParam = newIdentNode("bodyArg")
+    bodyType =
+      block:
+        let routerType = getTypeInst(router)
+        if routerType.isBracketExpr("RestRouterGen"):
+          routerType[1]
+        else:
+          nnkBracketExpr.newTree(ident("Option"), ident("ContentBody"))
     spath = SegmentedPath.init(meth, pathStr, nil)
     # Not sure about this, it creates HttpMethod(int).
     methIdent = newLit(meth)
