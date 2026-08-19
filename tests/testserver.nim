@@ -983,5 +983,27 @@ suite "REST API server test suite":
       await server.stop()
       await server.closeWait()
 
+  asyncTest "Opt[ContentBody] body through server test":
+    var router = RestRouterOpt.init(testValidate)
+    router.api(MethodPost, "/test/opt_body") do (
+      contentBody: Opt[ContentBody]) -> RestApiResponse:
+        if contentBody.isSome():
+          return RestApiResponse.response("ok-opt", contentType = "text/plain")
+        else:
+          return RestApiResponse.error(Http400, "no body")
+
+    var sres = RestServerRefGen[Opt[ContentBody]].new(router, serverAddress)
+    let server = sres.get()
+    server.start()
+    try:
+      let res = await httpClient(serverAddress, MethodPost, "/test/opt_body",
+                                 "hello", ctype = "text/plain")
+      check:
+        res.status == 200
+        res.data == "ok-opt"
+    finally:
+      await server.stop()
+      await server.closeWait()
+
   test "Leaks test":
     checkLeaks()
