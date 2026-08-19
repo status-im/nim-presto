@@ -14,18 +14,21 @@ import chronos, chronos/apps/http/httpserver
 import chronicles
 import results
 import "."/[route, common, segpath, servercommon, serverprivate, agent]
-export options, chronos, httpserver, servercommon, chronicles, agent
+export options, results, chronos, httpserver, servercommon, chronicles, agent
 
 type
-  RestServer* = object of RootObj
+  RestServerGen*[B: BodyType] = object of RootObj
     server*: HttpServerRef
-    router*: RestRouter
+    router*: RestRouterGen[B]
     errorHandler*: RestRequestErrorHandler
 
-  RestServerRef* = ref RestServer
+  RestServerRefGen*[B: BodyType] = ref RestServerGen[B]
 
-proc new*(t: typedesc[RestServerRef],
-          router: RestRouter,
+  RestServer* = RestServerGen[Option[ContentBody]]
+  RestServerRef* = RestServerRefGen[Option[ContentBody]]
+
+proc new*[B: BodyType](t: typedesc[RestServerRefGen[B]],
+          router: RestRouterGen[B],
           address: TransportAddress,
           serverIdent: string = PrestoIdent,
           serverFlags = {HttpServerFlags.NotifyDisconnect},
@@ -40,12 +43,13 @@ proc new*(t: typedesc[RestServerRef],
           requestErrorHandler: RestRequestErrorHandler = nil,
           dualstack = DualStackType.Auto,
           errorType: type = cstring
-          ): Result[RestServerRef, errorType] =
-  var server = RestServerRef(router: router, errorHandler: requestErrorHandler)
+          ): Result[RestServerRefGen[B], errorType] =
+  var server = RestServerRefGen[B](router: router,
+                                   errorHandler: requestErrorHandler)
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] {.
        async: (raw: true, raises: [CancelledError]).} =
-    processRestRequest[RestServerRef](server, rf)
+    processRestRequest[RestServerRefGen[B]](server, rf)
 
   let sres = HttpServerRef.new(address, processCallback, serverFlags,
                                socketFlags, serverUri, serverIdent,
@@ -65,11 +69,11 @@ proc new*(t: typedesc[RestServerRef],
     else:
       {.fatal: "Error type is not supported".}
 
-proc localAddress*(rs: RestServerRef): TransportAddress =
+proc localAddress*[B: BodyType](rs: RestServerRefGen[B]): TransportAddress =
   ## Returns `rs` bound local socket address.
   rs.server.instance.localAddress()
 
-proc state*(rs: RestServerRef): RestServerState =
+proc state*[B: BodyType](rs: RestServerRefGen[B]): RestServerState =
   ## Returns current REST server's state.
   case rs.server.state
   of HttpServerState.ServerClosed:
@@ -79,27 +83,27 @@ proc state*(rs: RestServerRef): RestServerState =
   of HttpServerState.ServerRunning:
     RestServerState.Running
 
-proc start*(rs: RestServerRef) =
+proc start*[B: BodyType](rs: RestServerRefGen[B]) =
   ## Starts REST server.
   rs.server.start()
   notice "REST service started", address = $rs.localAddress()
 
-proc stop*(rs: RestServerRef) {.async: (raises: []).} =
+proc stop*[B: BodyType](rs: RestServerRefGen[B]) {.async: (raises: []).} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
   notice "REST service stopped", address = $rs.localAddress()
 
-proc drop*(rs: RestServerRef): Future[void] {.
+proc drop*[B: BodyType](rs: RestServerRefGen[B]): Future[void] {.
      async: (raw: true, raises: []).} =
   ## Drop all pending connections.
   rs.server.drop()
 
-proc closeWait*(rs: RestServerRef) {.async: (raises: []).} =
+proc closeWait*[B: BodyType](rs: RestServerRefGen[B]) {.async: (raises: []).} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
   notice "REST service closed", address = $rs.localAddress()
 
-proc join*(rs: RestServerRef): Future[void] {.
+proc join*[B: BodyType](rs: RestServerRefGen[B]): Future[void] {.
      async: (raw: true, raises: [CancelledError]).} =
   ## Wait until REST server will not be closed.
   rs.server.join()
