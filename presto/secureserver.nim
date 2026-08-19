@@ -46,15 +46,15 @@ proc new*[B: BodyType](t: typedesc[SecureRestServerRefGen[B]],
           requestErrorHandler: RestRequestErrorHandler = nil,
           dualstack = DualStackType.Auto,
           errorType: type = cstring
-         ): Result[SecureRestServerRef, errorType] =
-  var server = SecureRestServerRef(
+         ): Result[SecureRestServerRefGen[B], errorType] =
+  var server = SecureRestServerRefGen[B](
     router: router,
     errorHandler: requestErrorHandler
   )
 
   proc processCallback(rf: RequestFence): Future[HttpResponseRef] {.
        async: (raw: true, raises: [CancelledError]).} =
-    processRestRequest(server, rf)
+    processRestRequest[SecureRestServerRefGen[B]](server, rf)
 
   let sres = SecureHttpServerRef.new(address, processCallback, tlsPrivateKey,
                                      tlsCertificate, serverFlags, socketFlags,
@@ -75,11 +75,12 @@ proc new*[B: BodyType](t: typedesc[SecureRestServerRefGen[B]],
     else:
       {.fatal: "Error type is not supported".}
 
-proc localAddress*(rs: SecureRestServerRef): TransportAddress =
+proc localAddress*[B: BodyType](rs: SecureRestServerRefGen[B]):
+  TransportAddress =
   ## Returns `rs` bound local socket address.
   rs.server.instance.localAddress()
 
-proc state*(rs: SecureRestServerRef): RestServerState =
+proc state*[B: BodyType](rs: SecureRestServerRefGen[B]): RestServerState =
   ## Returns current REST server's state.
   case rs.server.state
   of HttpServerState.ServerClosed:
@@ -89,27 +90,28 @@ proc state*(rs: SecureRestServerRef): RestServerState =
   of HttpServerState.ServerRunning:
     RestServerState.Running
 
-proc start*(rs: SecureRestServerRef) =
+proc start*[B: BodyType](rs: SecureRestServerRefGen[B]) =
   ## Starts REST server.
   rs.server.start()
   notice "Secure REST service started", address = $rs.localAddress()
 
-proc stop*(rs: SecureRestServerRef) {.async: (raises: []).} =
+proc stop*[B: BodyType](rs: SecureRestServerRefGen[B]) {.async: (raises: []).} =
   ## Stop REST server from accepting new connections.
   await rs.server.stop()
   notice "Secure REST service stopped", address = $rs.localAddress()
 
-proc drop*(rs: SecureRestServerRef): Future[void] {.
+proc drop*[B: BodyType](rs: SecureRestServerRefGen[B]): Future[void] {.
      async: (raw: true, raises: []).} =
   ## Drop all pending connections.
   rs.server.drop()
 
-proc closeWait*(rs: SecureRestServerRef) {.async: (raises: []).} =
+proc closeWait*[B: BodyType](rs: SecureRestServerRefGen[B]) {.
+     async: (raises: []).} =
   ## Stop REST server and drop all the pending connections.
   await rs.server.closeWait()
   notice "Secure REST service closed", address = $rs.localAddress()
 
-proc join*(rs: SecureRestServerRef): Future[void] {.
+proc join*[B: BodyType](rs: SecureRestServerRefGen[B]): Future[void] {.
      async: (raw: true, raises: [CancelledError]).} =
   ## Wait until REST server will not be closed.
   rs.server.join()
