@@ -13,6 +13,7 @@ import std/[macros, options]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpserver]
 import httputils
 import stew/bitops2
+import results
 import "."/[btrees, common, segpath, macrocommon]
 export chronos, options, common, httpcommon, httptable, httpserver
 
