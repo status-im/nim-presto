@@ -165,6 +165,62 @@ suite "REST API router & macro tests":
       r2.kind == RestApiResponseKind.Content
       bytesToString(r2.content.data) == "ok-2"
 
+  test "Opt[T] query parameters test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet,
+               "/test/opt_args/{smp1}") do (
+      smp1: int,
+      opt1: Opt[int], opt2: Opt[string],
+      opt3: Opt[seq[byte]]) -> RestApiResponse:
+        let s1 = smp1.get()
+        if opt1.isSome() and opt2.isSome() and opt3.isSome():
+          let o1 = opt1.get().get()
+          let o2 = opt2.get().get()
+          let o3 = opt3.get().get()
+          if s1 == 111111 and o1 == 222222 and o2 == "optval" and
+             bytesToString(o3) == "optval":
+            return RestApiResponse.response("ok-opt-some",
+                                            contentType = "test/test")
+        elif opt1.isNone() and opt2.isNone() and opt3.isNone():
+          if s1 == 111111:
+            return RestApiResponse.response("ok-opt-none",
+                                            contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/opt_args/111111" &
+      "?opt1=222222&opt2=optval&opt3=0x6f707476616c")
+    let r2 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/opt_args/111111")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt-some"
+      r2.kind == RestApiResponseKind.Content
+      bytesToString(r2.content.data) == "ok-opt-none"
+
+  test "Mixing Option and Opt query parameters test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet,
+               "/test/mix_args/{smp1}") do (
+      smp1: int,
+      a: Option[int], b: Opt[int],
+      c: Option[string], d: Opt[string]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let av = a.get().get()
+        let bv = b.get().get()
+        let cv = c.get().get()
+        let dv = d.get().get()
+        if s1 == 111111 and av == 222222 and bv == 333333 and
+           cv == "option" and dv == "opt":
+          return RestApiResponse.response("ok-mix",
+                                          contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/mix_args/111111" &
+      "?a=222222&b=333333&c=option&d=opt")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-mix"
+
   test "Routes installation from generic proc":
     proc addGenericRoute(router: var RestRouter, T: type) =
       const typeName = typetraits.name(T)
