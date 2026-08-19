@@ -14,7 +14,7 @@ import chronos, chronos/apps/http/shttpserver
 import chronicles
 import results
 import "."/[route, common, segpath, servercommon, serverprivate, agent]
-export options, chronos, shttpserver, servercommon, chronicles, agent
+export options, results, chronos, shttpserver, servercommon, chronicles, agent
 
 type
   SecureRestServer* = object of RootObj
