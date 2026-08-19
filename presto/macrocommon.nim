@@ -74,8 +74,14 @@ proc isBracketExpr*(n: NimNode, nodes: varargs[string]): bool =
 
   return true
 
+proc isOptionArg*(typeNode: NimNode): bool =
+  typeNode.isBracketExpr("Option")
+
+proc isOptArg*(typeNode: NimNode): bool =
+  typeNode.isBracketExpr("Opt")
+
 proc isOptionalArg*(typeNode: NimNode): bool =
-  typeNode.isBracketExpr "Option"
+  typeNode.isOptionArg() or typeNode.isOptArg()
 
 proc isBytesArg*(typeNode: NimNode): bool =
   typeNode.isBracketExpr("seq", "byte|uint8")
