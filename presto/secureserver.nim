@@ -17,15 +17,18 @@ import "."/[route, common, segpath, servercommon, serverprivate, agent]
 export options, results, chronos, shttpserver, servercommon, chronicles, agent
 
 type
-  SecureRestServer* = object of RootObj
+  SecureRestServerGen*[B: BodyType] = object of RootObj
     server*: SecureHttpServerRef
-    router*: RestRouter
+    router*: RestRouterGen[B]
     errorHandler*: RestRequestErrorHandler
 
-  SecureRestServerRef* = ref SecureRestServer
+  SecureRestServerRefGen*[B: BodyType] = ref SecureRestServerGen[B]
 
-proc new*(t: typedesc[SecureRestServerRef],
-          router: RestRouter,
+  SecureRestServer* = SecureRestServerGen[Option[ContentBody]]
+  SecureRestServerRef* = SecureRestServerRefGen[Option[ContentBody]]
+
+proc new*[B: BodyType](t: typedesc[SecureRestServerRefGen[B]],
+          router: RestRouterGen[B],
           address: TransportAddress,
           tlsPrivateKey: TLSPrivateKey,
           tlsCertificate: TLSCertificate,
