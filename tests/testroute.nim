@@ -7,8 +7,9 @@ import ../presto/route, ../presto/segpath
 
 when defined(nimHasUsed): {.used.}
 
-proc sendMockRequest(router: RestRouter, meth: HttpMethod, url: string,
-                     body: Option[ContentBody]): RestApiResponse =
+proc sendMockRequest[B: BodyType](
+    router: RestRouterGen[B], meth: HttpMethod, url: string, body: B
+): RestApiResponse =
   var uri = parseUri(url)
   var req = HttpRequestRef(meth: meth, version: HttpVersion11)
   let spath =
@@ -26,15 +27,27 @@ proc sendMockRequest(router: RestRouter, meth: HttpMethod, url: string,
   let paramsTable = route.getParamsTable()
   return waitFor(route.callback(req, paramsTable, queryTable, body))
 
-proc sendMockRequest(router: RestRouter, meth: HttpMethod,
-                     url: string): RestApiResponse =
-  sendMockRequest(router, meth, url, none[ContentBody]())
+proc sendMockRequest[B: BodyType](
+    router: RestRouterGen[B], meth: HttpMethod, url: string
+): RestApiResponse =
+  let emptyBody =
+    when B is Option:
+      none[ContentBody]()
+    elif B is Opt:
+      Opt.none(ContentBody)
+  sendMockRequest[B](router, meth, url, emptyBody)
 
-proc sendMockRequest(router: RestRouter, meth: HttpMethod,
-                     url: string, data: string): RestApiResponse =
-  let contentBody = ContentBody.init(
-    MediaType.init("text/plain"), stringToBytes(data))
-  sendMockRequest(router, meth, url, some[ContentBody](contentBody))
+proc sendMockRequest[B: BodyType](
+    router: RestRouterGen[B], meth: HttpMethod, url: string, data: string
+): RestApiResponse =
+  let
+    contentBodyVal = ContentBody.init(MediaType.init("text/plain"), stringToBytes(data))
+    contentBody =
+      when B is Option:
+        some[ContentBody](contentBodyVal)
+      elif B is Opt:
+        Opt[ContentBody].some(contentBodyVal)
+  sendMockRequest[B](router, meth, url, contentBody)
 
 suite "REST API router & macro tests":
   test "No parameters test":
