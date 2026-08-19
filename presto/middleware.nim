@@ -13,9 +13,9 @@ import chronos, chronos/apps/http/httpserver
 import "."/[route, servercommon, serverprivate]
 export httpserver, servercommon, serverprivate
 
-proc new*(
-    t: typedesc[RestServerMiddlewareRef],
-    router: RestRouter,
+proc new*[B: BodyType](
+    t: typedesc[RestServerMiddlewareRefGen[B]],
+    router: RestRouterGen[B],
     errorHandler: RestRequestErrorHandler = nil): HttpServerMiddlewareRef =
 
   proc middlewareCallback(
@@ -23,11 +23,11 @@ proc new*(
       request: RequestFence,
       handler: HttpProcessCallback2): Future[HttpResponseRef] {.
       async: (raises: [CancelledError], raw: true).} =
-    let restmw = RestServerMiddlewareRef(middleware)
+    let restmw = RestServerMiddlewareRefGen[B](middleware)
     restmw.nextHandler = handler
-    processRestRequest[RestServerMiddlewareRef](restmw, request)
+    processRestRequest[RestServerMiddlewareRefGen[B]](restmw, request)
 
   let middleware =
-    RestServerMiddlewareRef(router: router, errorHandler: errorHandler,
-                            handler: middlewareCallback)
+    RestServerMiddlewareRefGen[B](router: router, errorHandler: errorHandler,
+                                  handler: middlewareCallback)
   HttpServerMiddlewareRef(middleware)
