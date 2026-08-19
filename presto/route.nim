@@ -21,17 +21,22 @@ when defined(metrics):
   import metrics
 
 type
-  RestApiCallback* =
+  BodyType* = Option[ContentBody] | Opt[ContentBody]
+
+  RestApiCallbackGen*[B: BodyType] =
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
-         body: Option[ContentBody]): Future[RestApiResponse] {.
+         body: B): Future[RestApiResponse] {.
       raises: [], gcsafe.}
 
-  RestApiCallback2* =
+  RestApiCallback2Gen*[B: BodyType] =
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
-         body: Option[ContentBody]): Future[RestApiResponse] {.
+         body: B): Future[RestApiResponse] {.
       async: (raises: [CancelledError]).}
+
+  RestApiCallback* = RestApiCallbackGen[Option[ContentBody]]
+  RestApiCallback2* = RestApiCallback2Gen[Option[ContentBody]]
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
@@ -39,29 +44,34 @@ type
   RestRouterFlag* {.pure.} = enum
     Raw
 
-  RestRoute* = object
+  RestRouteGen*[B: BodyType] = object
     requestPath*: SegmentedPath
     routePath*: SegmentedPath
-    callback*: RestApiCallback2
+    callback*: RestApiCallback2Gen[B]
     flags*: set[RestRouterFlag]
     metrics*: set[RestServerMetricsType]
 
-  RestRouteItem* = object
+  RestRouteItemGen*[B: BodyType] = object
     case kind*: RestRouteKind
     of RestRouteKind.None:
       discard
     of RestRouteKind.Handler:
-      callback: RestApiCallback2
+      callback: RestApiCallback2Gen[B]
     of RestRouteKind.Redirect:
       redirectPath*: SegmentedPath
     path: SegmentedPath
     flags*: set[RestRouterFlag]
     metrics*: set[RestServerMetricsType]
 
-  RestRouter* = object
+  RestRouterGen*[B: BodyType] = object
     patternCallback*: PatternCallback
-    routes*: BTree[SegmentedPath, RestRouteItem]
+    routes*: BTree[SegmentedPath, RestRouteItemGen[B]]
     allowedOrigin*: Option[string]
+
+  RestRoute* = RestRouteGen[Option[ContentBody]]
+  RestRouteItem* = RestRouteItemGen[Option[ContentBody]]
+  RestRouter* = RestRouterGen[Option[ContentBody]]
+  RestRouterOpt* = RestRouterGen[Opt[ContentBody]]
 
 proc init*(t: typedesc[RestRouter],
            patternCallback: PatternCallback,
