@@ -90,7 +90,7 @@ proc isSequenceArg*(typeNode: NimNode): bool =
   typeNode.isBracketExpr("seq")
 
 proc isContentBodyArg*(typeNode: NimNode): bool =
-  typeNode.isBracketExpr("Option", "ContentBody")
+  typeNode.isBracketExpr("Option", "ContentBody") or typeNode.isBracketExpr("Opt", "ContentBody")
 
 proc isResponseArg*(typeNode: NimNode): bool =
   typeNode.isKnownType "HttpResponseRef"
@@ -102,7 +102,7 @@ proc getSequenceType*(typeNode: NimNode): NimNode =
     nil
 
 proc getOptionType*(typeNode: NimNode): NimNode =
-  if typeNode.isBracketExpr("Option"):
+  if typeNode.isBracketExpr("Option") or typeNode.isBracketExpr("Opt"):
     typeNode[1]
   else:
     nil
