@@ -1,18 +1,18 @@
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
-version       = "0.1.2"
+version       = "0.1.3"
 author        = "Status Research & Development GmbH"
 description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
-requires "nim >= 1.6.10",
+requires "nim >= 2.0.10",
          "chronos >= 4.0.3 & <5.0.0",
-         "chronicles",
-         "metrics",
-         "results",
-         "stew"
+         "chronicles >= 0.12.4",
+         "metrics >= 0.1.0",
+         "results >= 0.5.0",
+         "stew >= 0.5.2"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
@@ -29,8 +29,7 @@ proc build(args, path: string) =
 
 proc run(path: string) =
   build " --mm:refc -r", path
-  if (NimMajor, NimMinor) > (1, 6):
-    build " --mm:orc -r", path
+  build " --mm:orc -r", path
 
 task test, "Runs rest tests":
   run "tests/testall"
