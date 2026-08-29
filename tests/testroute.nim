@@ -594,3 +594,68 @@ suite "REST API router & macro tests":
       bytesToString(r10.content.data) == "ok-2"
       bytesToString(r11.content.data) == "ok-2"
       bytesToString(r12.content.data) == "ok-2"
+
+  test "Opt[T] as parameters test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodGet,
+               "/test/opt_args/1/{smp1}/{smp2}/{smp3}") do (
+      smp1: int, smp2: string, smp3: seq[byte],
+      opt1: Opt[int], opt2: Opt[string],
+      opt3: Opt[seq[byte]]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let s2 = smp2.get()
+        let s3 = smp3.get()
+        let o1 = opt1.get().get()
+        let o2 = opt2.get().get()
+        let o3 = opt3.get().get()
+        if (s1 == 111111) and (s2 == "opttest") and
+           (bytesToString(s3) == "opttest") and
+           (o1 == 222222) and (o2 == "optval") and
+           (bytesToString(o3) == "optval"):
+          return RestApiResponse.response("ok-opt", contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodGet,
+      "http://l.to/test/opt_args/1/111111/opttest/0x6f707474657374" &
+      "?opt1=222222&opt2=optval&opt3=0x6f707476616c")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt"
+
+  test "Opt[ContentBody] as body parameter test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost,
+               "/test/opt_body/1/{smp1}") do (
+      smp1: int, body: Opt[ContentBody]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let cbody = body.get()
+        if (s1 == 333333) and (bytesToString(cbody.data) == "bodytest"):
+          return RestApiResponse.response("ok-opt-body",
+                                           contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodPost,
+      "http://l.to/test/opt_body/1/333333", "bodytest")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt-body"
+
+  test "Opt[T] and Opt[ContentBody] combined test":
+    var router = RestRouter.init(testValidate)
+    router.api(MethodPost,
+               "/test/opt_combined/1/{smp1}") do (
+      smp1: int, opt1: Opt[int], opt2: Opt[string],
+      body: Opt[ContentBody]) -> RestApiResponse:
+        let s1 = smp1.get()
+        let o1 = opt1.get().get()
+        let o2 = opt2.get().get()
+        let cbody = body.get()
+        if (s1 == 444444) and (o1 == 555555) and (o2 == "combined") and
+           (bytesToString(cbody.data) == "combinedbody"):
+          return RestApiResponse.response("ok-opt-combined",
+                                           contentType = "test/test")
+
+    let r1 = router.sendMockRequest(MethodPost,
+      "http://l.to/test/opt_combined/1/444444" &
+      "?opt1=555555&opt2=combined", "combinedbody")
+    check:
+      r1.kind == RestApiResponseKind.Content
+      bytesToString(r1.content.data) == "ok-opt-combined"

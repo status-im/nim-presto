@@ -54,7 +54,7 @@ proc isKnownType*(typeNode: NimNode, typeNames: varargs[string]): bool =
   typeNode.kind in {nnkIdent, nnkSym} and
   $typeNode in typeNames
 
-proc isBracketExpr(n: NimNode, nodes: varargs[string]): bool =
+proc isBracketExpr*(n: NimNode, nodes: varargs[string]): bool =
   let leadingIdx = if n.kind == nnkBracketExpr:
     0
   elif n.kind == nnkCall and
@@ -75,7 +75,7 @@ proc isBracketExpr(n: NimNode, nodes: varargs[string]): bool =
   return true
 
 proc isOptionalArg*(typeNode: NimNode): bool =
-  typeNode.isBracketExpr "Option"
+  typeNode.isBracketExpr("Option") or typeNode.isBracketExpr("Opt")
 
 proc isBytesArg*(typeNode: NimNode): bool =
   typeNode.isBracketExpr("seq", "byte|uint8")
@@ -84,7 +84,8 @@ proc isSequenceArg*(typeNode: NimNode): bool =
   typeNode.isBracketExpr("seq")
 
 proc isContentBodyArg*(typeNode: NimNode): bool =
-  typeNode.isBracketExpr("Option", "ContentBody")
+  typeNode.isBracketExpr("Option", "ContentBody") or
+  typeNode.isBracketExpr("Opt", "ContentBody")
 
 proc isResponseArg*(typeNode: NimNode): bool =
   typeNode.isKnownType "HttpResponseRef"
@@ -96,7 +97,7 @@ proc getSequenceType*(typeNode: NimNode): NimNode =
     nil
 
 proc getOptionType*(typeNode: NimNode): NimNode =
-  if typeNode.isBracketExpr("Option"):
+  if typeNode.isBracketExpr("Option") or typeNode.isBracketExpr("Opt"):
     typeNode[1]
   else:
     nil

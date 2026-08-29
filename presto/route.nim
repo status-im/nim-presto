@@ -292,8 +292,8 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
 
   # Validating and retrieve arguments.
   #
-  # `bodyArgument` will hold name of `Option[ContentBody]` argument which
-  # used to obtain request's content body.
+  # `bodyArgument` will hold name and type of `Option[ContentBody]` or
+  # `Opt[ContentBody]` argument which used to obtain request's content body.
   # `respArgument` will hold name of `HttpResponseRef` argument which used
   # to manipulate response.
   # `optionalArguments` will hold sequence of all the optional arguments.
@@ -301,7 +301,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
   let (bodyArgument, respArgument, optionalArguments, pathArguments) =
     block:
       var
-        bodyRes: NimNode = nil
+        bodyRes: tuple[name: NimNode, ntype: NimNode]
         respRes: NimNode = nil
         optionalRes: seq[tuple[name, ntype: NimNode]]
         pathRes: seq[tuple[name, ntype: NimNode]]
@@ -328,8 +328,8 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
                   paramName)
 
           if isContentBodyArg(paramType):
-            if isNil(bodyRes):
-              bodyRes = paramName
+            if isNil(bodyRes.name):
+              bodyRes = (paramName, paramType)
             else:
               error("There should be only one argument of " &
                     paramType.strVal & " type", paramType)
@@ -377,17 +377,28 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       for (paramName, paramType) in optionalArguments:
         let strName = newStrLitNode($paramName)
         if isOptionalArg(paramType):
-          # Optional arguments which has type `Option[T]`.
+          # Optional arguments which has type `Option[T]` or `Opt[T]`.
           let optType = getOptionType(paramType)
-          res.add(quote do:
-            let `paramName` {.used.}: Option[Result[`optType`, cstring]] =
-              if `strName` notin `queryParams`:
-                none[Result[`optType`, cstring]]()
-              else:
-                some[Result[`optType`, cstring]](
-                  decodeString(`optType`, `queryParams`.getString(`strName`))
-                )
-          )
+          if paramType.isBracketExpr("Opt"):
+            res.add(quote do:
+              let `paramName` {.used.}: Opt[Result[`optType`, cstring]] =
+                if `strName` notin `queryParams`:
+                  Opt.none(Result[`optType`, cstring])
+                else:
+                  Opt.some(
+                    decodeString(`optType`, `queryParams`.getString(`strName`))
+                  )
+            )
+          else:
+            res.add(quote do:
+              let `paramName` {.used.}: Option[Result[`optType`, cstring]] =
+                if `strName` notin `queryParams`:
+                  none[Result[`optType`, cstring]]()
+                else:
+                  some[Result[`optType`, cstring]](
+                    decodeString(`optType`, `queryParams`.getString(`strName`))
+                  )
+            )
         else:
           # Optional arguments which has type `seq[T]`.
           let seqType = getSequenceType(paramType)
@@ -414,10 +425,21 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
   let bodyDecoder =
     block:
       var res = newStmtList()
-      if not(isNil(bodyArgument)):
-        res.add(quote do:
-          let `bodyArgument` {.used.}: Option[ContentBody] = `bodyParam`
-        )
+      if not(isNil(bodyArgument.name)):
+        if bodyArgument.ntype.isBracketExpr("Opt"):
+          let bodyName = bodyArgument.name
+          res.add(quote do:
+            let `bodyName` {.used.}: Opt[ContentBody] =
+              if `bodyParam`.isSome():
+                Opt.some(`bodyParam`.get())
+              else:
+                Opt.none(ContentBody)
+          )
+        else:
+          let bodyName = bodyArgument.name
+          res.add(quote do:
+            let `bodyName` {.used.}: Option[ContentBody] = `bodyParam`
+          )
       res
 
   # `HttpResponseRef` argument unmarshalling code.
