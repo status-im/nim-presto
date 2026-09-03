@@ -7,48 +7,18 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    timeout-minutes: 20
-
-    name: "Generate & upload documentation"
-    runs-on: "ubuntu-latest"
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          submodules: true
-
-      - name: Setup cargo-binstall
-        uses: cargo-bins/cargo-binstall@main
-
-      - name: Install mdBook and preprocessors
-        run: |
-          cargo binstall mdbook@0.4.52 \
-            mdbook-toc@0.14.2 \
-            mdbook-open-on-gh@2.4.3 \
-            mdbook-admonish@1.20.0 \
-            mdbook-shiftinclude@0.1.0
-
-      - uses: jiro4989/setup-nim-action@v1
-        with:
-          nim-version: "1.6.20"
-
-      - name: Compile examples
-        run: |
-          nimble install -dy
-          nimble examples
-
-      - name: Generate docs
-        run: |
-          nim --version
-          nimble --version
-          nimble install -dy
-          nimble docs || true
-
-      - name: Deploy docs
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
-          force_orphan: true
+  docs:
+    uses: status-im/nimbus-common-workflow/.github/workflows/docs.yml@main
+    with:
+      mdbook-version: "0.4.52"
+      mdbook-preprocessors: >-
+        [
+          "mdbook-toc@0.14.2",
+          "mdbook-open-on-gh@2.4.3",
+          "mdbook-admonish@1.20.0",
+          "mdbook-shiftinclude@0.1",
+        ]
+      docs-command: |
+        nimble install -dy
+        nimble examples
+        nimble docs
