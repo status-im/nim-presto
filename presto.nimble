@@ -34,3 +34,17 @@ proc run(path: string) =
 
 task test, "Runs rest tests":
   run "tests/testall"
+
+task apidocs, "Generate the API docs":
+  selfExec "doc --git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto"
+  selfExec "doc --git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/client"
+  selfExec "doc --git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/secureserver"
+  selfExec "doc --git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/middleware"
+
+task book, "Generate the book":
+  exec "mdbook build book/ -d ../docs/"
+
+task docs, "Generate the documentation":
+  rmDir "docs"
+  exec "nimble book"
+  exec "nimble apidocs"
