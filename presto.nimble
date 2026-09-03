@@ -45,7 +45,7 @@ task examples, "Compile all examples":
     let filename = path.splitFile().name
     echo "  Compiling: ", filename
     try:
-      run("", path)
+      build("", path)
       echo "  \x1B[0;92m[OK]\x1B[0;37m ", filename
     except:
       echo "  \x1B[0;31m[FAILED]\x1B[0;37m ", filename
