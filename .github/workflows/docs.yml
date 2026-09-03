@@ -34,14 +34,18 @@ jobs:
         with:
           nim-version: "1.6.20"
 
-      - name: Generate doc
+      - name: Compile examples
+        run: |
+          nimble examples
+
+      - name: Generate docs
         run: |
           nim --version
           nimble --version
           nimble install -dy
           nimble docs || true
 
-      - name: Deploy
+      - name: Deploy docs
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
