@@ -1,0 +1,11 @@
+nimTitle	servercommon	servercommon.html	module presto/servercommon		0
+nim	chroniclesFormatItIMPL	servercommon.html#chroniclesFormatItIMPL.t,HttpTable	template chroniclesFormatItIMPL(it: HttpTable): auto		18
+nim	chroniclesFormatItIMPL	servercommon.html#chroniclesFormatItIMPL.t,Option[ContentBody]	template chroniclesFormatItIMPL(it: Option[ContentBody]): auto		25
+nim	chroniclesExpandItIMPL	servercommon.html#chroniclesExpandItIMPL.t,RecordType,staticstring,RestApiError,auto	template chroniclesExpandItIMPL[RecordType: tuple](record: RecordType;\n    it_name: static string; it: RestApiError; enabled: auto)		77
+nim	chroniclesExpandItIMPL	servercommon.html#chroniclesExpandItIMPL.t,auto,staticstring,RestApiError	template chroniclesExpandItIMPL(record: auto; it_name: static string; it: RestApiError)		32
+nim	RestServerState	servercommon.html#RestServerState	enum RestServerState		38
+nim	RestRequestError	servercommon.html#RestRequestError	enum RestRequestError		41
+nim	RestRequestErrorHandler	servercommon.html#RestRequestErrorHandler	type RestRequestErrorHandler		44
+nim	RestServerMiddlewareRef	servercommon.html#RestServerMiddlewareRef	type RestServerMiddlewareRef		49
+nimgrp	chroniclesexpanditimpl	servercommon.html#chroniclesExpandItIMPL-templates-all	template		77
+nimgrp	chroniclesformatitimpl	servercommon.html#chroniclesFormatItIMPL-templates-all	template		12

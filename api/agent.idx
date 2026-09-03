@@ -1,0 +1,7 @@
+nimTitle	agent	agent.html	module presto/agent		0
+nim	PrestoName	agent.html#PrestoName	const PrestoName		15
+nim	PrestoMajor	agent.html#PrestoMajor	const PrestoMajor		17
+nim	PrestoMinor	agent.html#PrestoMinor	const PrestoMinor		19
+nim	PrestoPatch	agent.html#PrestoPatch	const PrestoPatch		21
+nim	PrestoVersion	agent.html#PrestoVersion	const PrestoVersion		23
+nim	PrestoIdent	agent.html#PrestoIdent	const PrestoIdent		25

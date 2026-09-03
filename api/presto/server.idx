@@ -1,0 +1,11 @@
+nimTitle	server	presto/server.html	module presto/server		0
+nim	RestServer	presto/server.html#RestServer	object RestServer		20
+nim	RestServerRef	presto/server.html#RestServerRef	type RestServerRef		25
+nim	new	presto/server.html#new,typedesc[RestServerRef],RestRouter,TransportAddress,string,set[ServerFlags],int,int,int,int,int,RestRequestErrorHandler,type	proc new(t: typedesc[RestServerRef]; router: RestRouter; address: TransportAddress;\n    serverIdent: string = PrestoIdent; serverFlags = {NotifyDisconnect};\n    socketFlags: set[ServerFlags] = {ReuseAddr}; serverUri = Uri();\n    maxConnections: int = -1; backlogSize: int = DefaultBacklogSize;\n    bufferSize: int = 4096; httpHeadersTimeout = 10.seconds;\n    maxHeadersSize: int = 8192; maxRequestBodySize: int = 1048576;\n    requestErrorHandler: RestRequestErrorHandler = nil;\n    dualstack = DualStackType.Auto; errorType: type = cstring): Result[\n    RestServerRef, errorType]		27
+nim	localAddress	presto/server.html#localAddress,RestServerRef	proc localAddress(rs: RestServerRef): TransportAddress		68
+nim	state	presto/server.html#state,RestServerRef	proc state(rs: RestServerRef): RestServerState		72
+nim	start	presto/server.html#start,RestServerRef	proc start(rs: RestServerRef)		82
+nim	stop	presto/server.html#stop,RestServerRef	proc stop(rs: RestServerRef): InternalRaisesFuture[void, void]		87
+nim	drop	presto/server.html#drop,RestServerRef	proc drop(rs: RestServerRef): InternalRaisesFuture[void, void]		93
+nim	closeWait	presto/server.html#closeWait,RestServerRef	proc closeWait(rs: RestServerRef): InternalRaisesFuture[void, void]		97
+nim	join	presto/server.html#join,RestServerRef	proc join(rs: RestServerRef): InternalRaisesFuture[void, (CancelledError,)]		103

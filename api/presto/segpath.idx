@@ -1,0 +1,23 @@
+nimTitle	segpath	presto/segpath.html	module presto/segpath		0
+nim	PatternCallback	presto/segpath.html#PatternCallback	type PatternCallback		20
+nim	SegmentedPath	presto/segpath.html#SegmentedPath	object SegmentedPath		23
+nim	KeyValueTuple	presto/segpath.html#KeyValueTuple	tuple KeyValueTuple		28
+nim	isPattern	presto/segpath.html#isPattern.t,SegmentedPath,int	template isPattern(spath: SegmentedPath; pos: int): bool		32
+nim	hasPatterns	presto/segpath.html#hasPatterns.t,SegmentedPath	template hasPatterns(spath: SegmentedPath): bool		35
+nim	patternsCount	presto/segpath.html#patternsCount,SegmentedPath	proc patternsCount(spath: SegmentedPath): int		38
+nim	keys	presto/segpath.html#keys.i,SegmentedPath	iterator keys(spath: SegmentedPath): string		42
+nim	indexes	presto/segpath.html#indexes.i,SegmentedPath	iterator indexes(spath: SegmentedPath): int		52
+nim	getPatterns	presto/segpath.html#getPatterns,SegmentedPath	proc getPatterns(spath: SegmentedPath): seq[string]		62
+nim	isEqual	presto/segpath.html#isEqual,SegmentedPath,SegmentedPath	proc isEqual(spath1, spath2: SegmentedPath): bool		69
+nim	pairs	presto/segpath.html#pairs.i,SegmentedPath,SegmentedPath	iterator pairs(spath: SegmentedPath; vpath: SegmentedPath): KeyValueTuple		82
+nim	getPairs	presto/segpath.html#getPairs,SegmentedPath,SegmentedPath	proc getPairs(spath: SegmentedPath; vpath: SegmentedPath): seq[KeyValueTuple]		87
+nim	rewritePath	presto/segpath.html#rewritePath,SegmentedPath,SegmentedPath,SegmentedPath	proc rewritePath(spath: SegmentedPath; dpath: SegmentedPath; vpath: SegmentedPath): SegmentedPath		99
+nim	`==`	presto/segpath.html#==,SegmentedPath,SegmentedPath	proc `==`(s1, s2: SegmentedPath): bool		116
+nim	`<`	presto/segpath.html#<,SegmentedPath,SegmentedPath	proc `<`(s1, s2: SegmentedPath): bool		144
+nim	init	presto/segpath.html#init,typedesc[SegmentedPath],string	proc init(st: typedesc[SegmentedPath]; upath: string): RestResult[SegmentedPath]		178
+nim	init	presto/segpath.html#init,typedesc[SegmentedPath],HttpMethod,string	proc init(st: typedesc[SegmentedPath]; request: HttpMethod; upath: string): RestResult[\n    SegmentedPath]		188
+nim	init	presto/segpath.html#init,typedesc[SegmentedPath],string,PatternCallback	proc init(st: typedesc[SegmentedPath]; upath: string; patternCb: PatternCallback): SegmentedPath		197
+nim	init	presto/segpath.html#init,typedesc[SegmentedPath],HttpMethod,string,PatternCallback	proc init(st: typedesc[SegmentedPath]; request: HttpMethod; upath: string;\n     patternCb: PatternCallback): SegmentedPath		219
+nim	createPath	presto/segpath.html#createPath,string,openArray[KeyValueTuple]	proc createPath(upath: string; values: openArray[KeyValueTuple]): string		228
+nim	`$`	presto/segpath.html#$,SegmentedPath	proc `$`(seg: SegmentedPath): string		263
+nimgrp	init	presto/segpath.html#init-procs-all	proc		178

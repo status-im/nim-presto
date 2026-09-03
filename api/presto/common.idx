@@ -1,0 +1,38 @@
+nimTitle	common	presto/common.html	module presto/common		0
+nim	ContentBody	presto/common.html#ContentBody	object ContentBody		19
+nim	ResponseContentBody	presto/common.html#ResponseContentBody	object ResponseContentBody		23
+nim	RestResult	presto/common.html#RestResult	type RestResult		27
+nim	RestApiError	presto/common.html#RestApiError	object RestApiError		29
+nim	RestApiResponseKind	presto/common.html#RestApiResponseKind	enum RestApiResponseKind		34
+nim	RestApiResponse	presto/common.html#RestApiResponse	object RestApiResponse		37
+nim	ByteChar	presto/common.html#ByteChar	type ByteChar		53
+nim	RestDefect	presto/common.html#RestDefect	object RestDefect		55
+nim	RestError	presto/common.html#RestError	object RestError		56
+nim	RestBadRequestError	presto/common.html#RestBadRequestError	object RestBadRequestError		57
+nim	RestEncodingError	presto/common.html#RestEncodingError	object RestEncodingError		58
+nim	RestDecodingError	presto/common.html#RestDecodingError	object RestDecodingError		60
+nim	RestCommunicationError	presto/common.html#RestCommunicationError	object RestCommunicationError		61
+nim	RestDnsResolveError	presto/common.html#RestDnsResolveError	object RestDnsResolveError		63
+nim	RestRedirectionError	presto/common.html#RestRedirectionError	object RestRedirectionError		65
+nim	RestResponseError	presto/common.html#RestResponseError	object RestResponseError		66
+nim	RestKeyValueTuple	presto/common.html#RestKeyValueTuple	tuple RestKeyValueTuple		70
+nim	RestServerMetricsType	presto/common.html#RestServerMetricsType	enum RestServerMetricsType		72
+nim	RestServerMetricsTypes	presto/common.html#RestServerMetricsTypes	type RestServerMetricsTypes		76
+nim	RestServerMetrics	presto/common.html#RestServerMetrics	const RestServerMetrics		79
+nim	init	presto/common.html#init,typedesc[ContentBody],MediaType,openArray[byte]	proc init(t: typedesc[ContentBody]; contentType: MediaType; data: openArray[byte]): ContentBody		84
+nim	error	presto/common.html#error,typedesc[RestApiResponse],HttpCode,string,string,HttpTable	proc error(t: typedesc[RestApiResponse]; status: HttpCode = Http200;\n      msg: string = ""; contentType: string = "text/html"; headers: HttpTable): RestApiResponse		92
+nim	error	presto/common.html#error,typedesc[RestApiResponse],HttpCode,string,string,openArray[RestKeyValueTuple]	proc error(t: typedesc[RestApiResponse]; status: HttpCode = Http200;\n      msg: string = ""; contentType: string = "text/html";\n      headers: openArray[RestKeyValueTuple]): RestApiResponse		107
+nim	error	presto/common.html#error,typedesc[RestApiResponse],HttpCode,string,string	proc error(t: typedesc[RestApiResponse]; status: HttpCode = Http200;\n      msg: string = ""; contentType: string = "text/html"): RestApiResponse		113
+nim	response	presto/common.html#response,typedesc[RestApiResponse],ByteChar,HttpCode,string,HttpTable	proc response(t: typedesc[RestApiResponse]; data: ByteChar;\n         status: HttpCode = Http200; contentType = "text/plain";\n         headers: HttpTable): RestApiResponse		118
+nim	response	presto/common.html#response,typedesc[RestApiResponse],ByteChar,HttpCode,string,openArray[RestKeyValueTuple]	proc response(t: typedesc[RestApiResponse]; data: ByteChar;\n         status: HttpCode = Http200; contentType = "text/plain";\n         headers: openArray[RestKeyValueTuple]): RestApiResponse		138
+nim	response	presto/common.html#response,typedesc[RestApiResponse],ByteChar,HttpCode,string	proc response(t: typedesc[RestApiResponse]; data: ByteChar;\n         status: HttpCode = Http200; contentType = "text/plain"): RestApiResponse		143
+nim	response	presto/common.html#response,typedesc[RestApiResponse],HttpCode,HttpTable	proc response(t: typedesc[RestApiResponse]; status: HttpCode; headers: HttpTable): RestApiResponse		148
+nim	response	presto/common.html#response,typedesc[RestApiResponse],HttpCode	proc response(t: typedesc[RestApiResponse]; status: HttpCode = Http200): RestApiResponse		156
+nim	response	presto/common.html#response,typedesc[RestApiResponse],HttpCode,openArray[RestKeyValueTuple]	proc response(t: typedesc[RestApiResponse]; status: HttpCode;\n         headers: openArray[RestKeyValueTuple]): RestApiResponse		160
+nim	redirect	presto/common.html#redirect,typedesc[RestApiResponse],HttpCode,string,HttpTable	proc redirect(t: typedesc[RestApiResponse]; status: HttpCode = Http307;\n         location: string; preserveQuery = false; headers: HttpTable): RestApiResponse		164
+nim	redirect	presto/common.html#redirect,typedesc[RestApiResponse],HttpCode,string,openArray[RestKeyValueTuple]	proc redirect(t: typedesc[RestApiResponse]; status: HttpCode = Http307;\n         location: string; preserveQuery = false;\n         headers: openArray[RestKeyValueTuple]): RestApiResponse		184
+nim	redirect	presto/common.html#redirect,typedesc[RestApiResponse],HttpCode,string	proc redirect(t: typedesc[RestApiResponse]; status: HttpCode = Http307;\n         location: string; preserveQuery = false): RestApiResponse		189
+nim	raiseRestDnsResolveError	presto/common.html#raiseRestDnsResolveError,string,string	proc raiseRestDnsResolveError(msg: string; hostname: string)		193
+nimgrp	response	presto/common.html#response-procs-all	proc		118
+nimgrp	redirect	presto/common.html#redirect-procs-all	proc		164
+nimgrp	error	presto/common.html#error-procs-all	proc		92

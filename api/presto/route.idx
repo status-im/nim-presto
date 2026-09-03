@@ -1,0 +1,34 @@
+nimTitle	route	presto/route.html	module presto/route		0
+nim	RestApiCallback	presto/route.html#RestApiCallback	type RestApiCallback		23
+nim	RestApiCallback2	presto/route.html#RestApiCallback2	type RestApiCallback2		29
+nim	RestRouteKind	presto/route.html#RestRouteKind	enum RestRouteKind		35
+nim	RestRouterFlag	presto/route.html#RestRouterFlag	enum RestRouterFlag		38
+nim	RestRoute	presto/route.html#RestRoute	object RestRoute		41
+nim	RestRouteItem	presto/route.html#RestRouteItem	object RestRouteItem		48
+nim	RestRouter	presto/route.html#RestRouter	object RestRouter		60
+nim	init	presto/route.html#init,typedesc[RestRouter],PatternCallback	proc init(t: typedesc[RestRouter]; patternCallback: PatternCallback;\n     allowedOrigin = none(string)): RestRouter		65
+nim	init	presto/route.html#init,typedesc[RestRouteItem],SegmentedPath,set[RestRouterFlag],set[RestServerMetricsType],RestApiCallback	proc init(t: typedesc[RestRouteItem]; spath: SegmentedPath;\n     flags: set[RestRouterFlag]; metrics: set[RestServerMetricsType];\n     handler: RestApiCallback): RestRouteItem		74
+nim	init	presto/route.html#init,typedesc[RestRouteItem],SegmentedPath,set[RestRouterFlag],set[RestServerMetricsType],RestApiCallback2	proc init(t: typedesc[RestRouteItem]; spath: SegmentedPath;\n     flags: set[RestRouterFlag]; metrics: set[RestServerMetricsType];\n     handler: RestApiCallback2): RestRouteItem		93
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,set[RestRouterFlag],set[RestServerMetricsType],RestApiCallback	proc addRoute(rr: var RestRouter; meth: HttpMethod; path: string;\n         flags: set[RestRouterFlag]; metrics: set[RestServerMetricsType];\n         handler: RestApiCallback)		143
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,set[RestRouterFlag],set[RestServerMetricsType],RestApiCallback2	proc addRoute(rr: var RestRouter; meth: HttpMethod; path: string;\n         flags: set[RestRouterFlag]; metrics: set[RestServerMetricsType];\n         handler: RestApiCallback2)		148
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,RestApiCallback	proc addRoute(rr: var RestRouter; request: HttpMethod; path: string;\n         handler: RestApiCallback)		153
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,RestApiCallback2	proc addRoute(rr: var RestRouter; request: HttpMethod; path: string;\n         handler: RestApiCallback2)		157
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,set[RestRouterFlag],RestApiCallback	proc addRoute(rr: var RestRouter; request: HttpMethod; path: string;\n         flags: set[RestRouterFlag]; handler: RestApiCallback)		161
+nim	addRoute	presto/route.html#addRoute,RestRouter,HttpMethod,string,set[RestRouterFlag],RestApiCallback2	proc addRoute(rr: var RestRouter; request: HttpMethod; path: string;\n         flags: set[RestRouterFlag]; handler: RestApiCallback2)		166
+nim	addRedirect	presto/route.html#addRedirect,RestRouter,HttpMethod,string,string	proc addRedirect(rr: var RestRouter; request: HttpMethod; srcPath: string;\n            dstPath: string)		171
+nim	getRoute	presto/route.html#getRoute,RestRouter,SegmentedPath	proc getRoute(rr: RestRouter; spath: SegmentedPath): Option[RestRoute]		186
+nim	params	presto/route.html#params.i,RestRoute	iterator params(route: RestRoute): string		204
+nim	pairs	presto/route.html#pairs.i,RestRoute	iterator pairs(route: RestRoute): tuple[key: string, value: string]		213
+nim	getParamsTable	presto/route.html#getParamsTable,RestRoute	proc getParamsTable(route: RestRoute): HttpTable		224
+nim	getParamsList	presto/route.html#getParamsList,RestRoute	proc getParamsList(route: RestRoute): seq[string]		230
+nim	redirect	presto/route.html#redirect.m,RestRouter,static[HttpMethod],static[string],static[string]	macro redirect(router: RestRouter; meth: static[HttpMethod]; fromPath: static[string];\n         toPath: static[string]): untyped		236
+nim	api	presto/route.html#api.m,RestRouter,static[HttpMethod],static[string],untyped	macro api(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n    body: untyped): untyped		478
+nim	rawApi	presto/route.html#rawApi.m,RestRouter,static[HttpMethod],static[string],untyped	macro rawApi(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n       body: untyped): untyped		482
+nim	metricsApi	presto/route.html#metricsApi.m,RestRouter,static[HttpMethod],static[string],static[set[RestServerMetricsType]],untyped	macro metricsApi(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n           metrics: static[set[RestServerMetricsType]]; body: untyped): untyped		486
+nim	rawMetricsApi	presto/route.html#rawMetricsApi.m,RestRouter,static[HttpMethod],static[string],static[set[RestServerMetricsType]],untyped	macro rawMetricsApi(router: RestRouter; meth: static[HttpMethod];\n              path: static[string]; metrics: static[set[RestServerMetricsType]];\n              body: untyped): untyped		492
+nim	api2	presto/route.html#api2.m,RestRouter,static[HttpMethod],static[string],untyped	macro api2(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n     body: untyped): untyped		498
+nim	rawApi2	presto/route.html#rawApi2.m,RestRouter,static[HttpMethod],static[string],untyped	macro rawApi2(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n        body: untyped): untyped		502
+nim	metricsApi2	presto/route.html#metricsApi2.m,RestRouter,static[HttpMethod],static[string],static[set[RestServerMetricsType]],untyped	macro metricsApi2(router: RestRouter; meth: static[HttpMethod]; path: static[string];\n            metrics: static[set[RestServerMetricsType]]; body: untyped): untyped		506
+nim	rawMetricsApi2	presto/route.html#rawMetricsApi2.m,RestRouter,static[HttpMethod],static[string],static[set[RestServerMetricsType]],untyped	macro rawMetricsApi2(router: RestRouter; meth: static[HttpMethod];\n               path: static[string];\n               metrics: static[set[RestServerMetricsType]]; body: untyped): untyped		512
+nimgrp	addroute	presto/route.html#addRoute-procs-all	proc		143
+nimgrp	init	presto/route.html#init-procs-all	proc		65

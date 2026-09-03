@@ -1,0 +1,53 @@
+nimTitle	client	client.html	module presto/client		0
+nim	RestClient	client.html#RestClient	object RestClient		40
+nim	RestClientRef	client.html#RestClientRef	type RestClientRef		46
+nim	RestPlainResponse	client.html#RestPlainResponse	object RestPlainResponse		48
+nim	RestResponse	client.html#RestResponse	object RestResponse		54
+nim	RestStatus	client.html#RestStatus	type RestStatus		59
+nim	RestHttpResponseRef	client.html#RestHttpResponseRef	type RestHttpResponseRef		61
+nim	RestClientFlag	client.html#RestClientFlag	enum RestClientFlag		63
+nim	RestClientFlags	client.html#RestClientFlags	type RestClientFlags		69
+nim	RestRequestFlag	client.html#RestRequestFlag	enum RestRequestFlag		71
+nim	Dedicated	client.html#Dedicated	RestConnectionFlag.Dedicated		77
+nim	Close	client.html#Close	RestConnectionFlag.Close		77
+nim	RestConnectionFlag	client.html#RestConnectionFlag	enum RestConnectionFlag		77
+nim	RestConnectionFlags	client.html#RestConnectionFlags	type RestConnectionFlags		80
+nim	RestClientMetricsType	client.html#RestClientMetricsType	enum RestClientMetricsType		82
+nim	RestClientMetricsTypes	client.html#RestClientMetricsTypes	type RestClientMetricsTypes		89
+nim	endpoint	client.html#endpoint.t,string	template endpoint(v: string)		91
+nim	meth	client.html#meth.t,HttpMethod	template meth(v: HttpMethod)		92
+nim	accept	client.html#accept.t,string	template accept(v: string)		93
+nim	connection	client.html#connection.t,RestConnectionFlag	template connection(v: RestConnectionFlag)		94
+nim	metrics	client.html#metrics.t	template metrics()		95
+nim	metrics	client.html#metrics.t,string	template metrics(v: string)		96
+nim	metricsTypes	client.html#metricsTypes.t,RestClientMetricsTypes	template metricsTypes(v: RestClientMetricsTypes)		97
+nim	RestClientMetricsAllTypes	client.html#RestClientMetricsAllTypes	const RestClientMetricsAllTypes		107
+nim	chroniclesExpandItIMPL	client.html#chroniclesExpandItIMPL.t,RecordType,staticstring,HttpAddress,auto	template chroniclesExpandItIMPL[RecordType: tuple](record: RecordType;\n    it_name: static string; it: HttpAddress; enabled: auto)		77
+nim	chroniclesExpandItIMPL	client.html#chroniclesExpandItIMPL.t,auto,staticstring,HttpAddress	template chroniclesExpandItIMPL(record: auto; it_name: static string; it: HttpAddress)		115
+nim	chroniclesFormatItIMPL	client.html#chroniclesFormatItIMPL.t,HttpClientConnectionRef	template chroniclesFormatItIMPL(it: HttpClientConnectionRef): auto		119
+nim	`==`	client.html#==,RestStatus,RestStatus	proc `==`(x, y: RestStatus): bool		122
+nim	`<=`	client.html#<=,RestStatus,RestStatus	proc `<=`(x, y: RestStatus): bool		123
+nim	`<`	client.html#<,RestStatus,RestStatus	proc `<`(x, y: RestStatus): bool		124
+nim	`$`	client.html#$,RestStatus	proc `$`(x: RestStatus): string		125
+nim	`$`	client.html#$,Opt[ContentTypeData]	proc `$`(x: Opt[ContentTypeData]): string		127
+nim	`==`	client.html#==,Opt[ContentTypeData],MediaType	proc `==`(a: Opt[ContentTypeData]; b: MediaType): bool		133
+nim	new	client.html#new,typedesc[RestClientRef],string,RestClientFlags,HttpClientFlags,int,int,int,set[SocketFlags]	proc new(t: typedesc[RestClientRef]; url: string; flags: RestClientFlags = {};\n    httpFlags: HttpClientFlags = {}; maxConnections: int = -1;\n    maxRedirections: int = HttpMaxRedirections;\n    connectTimeout = HttpConnectTimeout; headersTimeout = HttpHeadersTimeout;\n    idleTimeout = HttpConnectionIdleTimeout;\n    idlePeriod = HttpConnectionCheckPeriod; bufferSize: int = 4096;\n    userAgent = PrestoIdent; socketFlags: set[SocketFlags] = {};\n    dualstack = DualStackType.Auto): RestResult[RestClientRef]		139
+nim	new	client.html#new,typedesc[RestClientRef],HttpAddress,RestClientFlags,HttpClientFlags,int,int,int,set[SocketFlags]	proc new(t: typedesc[RestClientRef]; address: HttpAddress;\n    flags: RestClientFlags = {}; httpFlags: HttpClientFlags = {};\n    maxConnections: int = -1; maxRedirections: int = HttpMaxRedirections;\n    connectTimeout = HttpConnectTimeout; headersTimeout = HttpHeadersTimeout;\n    idleTimeout = HttpConnectionIdleTimeout;\n    idlePeriod = HttpConnectionCheckPeriod; bufferSize: int = 4096;\n    userAgent = PrestoIdent; socketFlags: set[SocketFlags] = {};\n    dualstack = DualStackType.Auto): RestClientRef		169
+nim	new	client.html#new,typedesc[RestClientRef],TransportAddress,HttpClientScheme,RestClientFlags,HttpClientFlags,int,int,int,set[SocketFlags]	proc new(t: typedesc[RestClientRef]; ta: TransportAddress;\n    scheme: HttpClientScheme = HttpClientScheme.NonSecure;\n    flags: RestClientFlags = {}; httpFlags: HttpClientFlags = {};\n    maxConnections: int = -1; maxRedirections: int = HttpMaxRedirections;\n    connectTimeout = HttpConnectTimeout; headersTimeout = HttpHeadersTimeout;\n    idleTimeout = HttpConnectionIdleTimeout;\n    idlePeriod = HttpConnectionCheckPeriod; bufferSize: int = 4096;\n    userAgent = PrestoIdent; socketFlags: set[SocketFlags] = {};\n    dualstack = DualStackType.Auto): RestClientRef		191
+nim	closeWait	client.html#closeWait,RestClientRef	proc closeWait(client: RestClientRef): InternalRaisesFuture[void, void]		215
+nim	raiseRestEncodingStringError	client.html#raiseRestEncodingStringError,staticstring	proc raiseRestEncodingStringError(field: static string)		376
+nim	raiseRestEncodingBytesError	client.html#raiseRestEncodingBytesError,staticstring	proc raiseRestEncodingBytesError(field: static string)		386
+nim	raiseRestCommunicationError	client.html#raiseRestCommunicationError,ref.HttpError	proc raiseRestCommunicationError(exc: ref HttpError)		396
+nim	raiseRestCommunicationError	client.html#raiseRestCommunicationError,ref.AsyncStreamError	proc raiseRestCommunicationError(exc: ref AsyncStreamError)		407
+nim	raiseRestResponseError	client.html#raiseRestResponseError,RestPlainResponse	proc raiseRestResponseError(resp: RestPlainResponse)		418
+nim	raiseRestRedirectionError	client.html#raiseRestRedirectionError,string	proc raiseRestRedirectionError(msg: string)		430
+nim	raiseRestDecodingBytesError	client.html#raiseRestDecodingBytesError,cstring	proc raiseRestDecodingBytesError(message: cstring)		436
+nim	requestWithoutBody	client.html#requestWithoutBody,HttpClientRequestRef,Opt[string],RestClientMetricsTypes	proc requestWithoutBody(req: HttpClientRequestRef; endpoint: Opt[string];\n                   metricsTypes: RestClientMetricsTypes): InternalRaisesFuture[\n    HttpClientResponseRef, (CancelledError, RestCommunicationError)]		684
+nim	requestWithBody	client.html#requestWithBody,HttpClientRequestRef,pointer,uint64,int,Opt[string],RestClientMetricsTypes	proc requestWithBody(req: HttpClientRequestRef; pbytes: pointer; nbytes: uint64;\n                chunkSize: int; endpoint: Opt[string];\n                metricsTypes: RestClientMetricsTypes): InternalRaisesFuture[\n    HttpClientResponseRef, (CancelledError, RestCommunicationError)]		762
+nim	rest	client.html#rest.m,untyped	macro rest(prc: untyped): untyped		1203
+nimgrp	==	client.html#==-procs-all	proc		122
+nimgrp	$	client.html#$-procs-all	proc		125
+nimgrp	new	client.html#new-procs-all	proc		139
+nimgrp	raiserestcommunicationerror	client.html#raiseRestCommunicationError-procs-all	proc		396
+nimgrp	chroniclesexpanditimpl	client.html#chroniclesExpandItIMPL-templates-all	template		77
+nimgrp	metrics	client.html#metrics-templates-all	template		95

@@ -1,0 +1,3 @@
+nimTitle	serverprivate	presto/serverprivate.html	module presto/serverprivate		0
+nim	getContentBody	presto/serverprivate.html#getContentBody,HttpRequestRef	proc getContentBody(r: HttpRequestRef): InternalRaisesFuture[Option[ContentBody], (\n    CancelledError, HttpTransportError, HttpProtocolError, RestBadRequestError)]		36
+nim	processRestRequest	presto/serverprivate.html#processRestRequest,T,RequestFence	proc processRestRequest[T](server: T; rf: RequestFence): InternalRaisesFuture[\n    HttpResponseRef, (CancelledError,)]		98

@@ -1,0 +1,11 @@
+nimTitle	secureserver	secureserver.html	module presto/secureserver		0
+nim	SecureRestServer	secureserver.html#SecureRestServer	object SecureRestServer		20
+nim	SecureRestServerRef	secureserver.html#SecureRestServerRef	type SecureRestServerRef		25
+nim	new	secureserver.html#new,typedesc[SecureRestServerRef],RestRouter,TransportAddress,TLSPrivateKey,TLSCertificate,string,set[TLSFlags],set[ServerFlags],int,int,int,int,int,RestRequestErrorHandler,type	proc new(t: typedesc[SecureRestServerRef]; router: RestRouter;\n    address: TransportAddress; tlsPrivateKey: TLSPrivateKey;\n    tlsCertificate: TLSCertificate; serverIdent: string = PrestoIdent;\n    secureFlags: set[TLSFlags] = {}; serverFlags = {NotifyDisconnect};\n    socketFlags: set[ServerFlags] = {ReuseAddr}; serverUri = Uri();\n    maxConnections: int = -1; backlogSize: int = DefaultBacklogSize;\n    bufferSize: int = 4096; httpHeadersTimeout = 10.seconds;\n    maxHeadersSize: int = 8192; maxRequestBodySize: int = 1048576;\n    requestErrorHandler: RestRequestErrorHandler = nil;\n    dualstack = DualStackType.Auto; errorType: type = cstring): Result[\n    SecureRestServerRef, errorType]		27
+nim	localAddress	secureserver.html#localAddress,SecureRestServerRef	proc localAddress(rs: SecureRestServerRef): TransportAddress		75
+nim	state	secureserver.html#state,SecureRestServerRef	proc state(rs: SecureRestServerRef): RestServerState		79
+nim	start	secureserver.html#start,SecureRestServerRef	proc start(rs: SecureRestServerRef)		89
+nim	stop	secureserver.html#stop,SecureRestServerRef	proc stop(rs: SecureRestServerRef): InternalRaisesFuture[void, void]		94
+nim	drop	secureserver.html#drop,SecureRestServerRef	proc drop(rs: SecureRestServerRef): InternalRaisesFuture[void, void]		100
+nim	closeWait	secureserver.html#closeWait,SecureRestServerRef	proc closeWait(rs: SecureRestServerRef): InternalRaisesFuture[void, void]		104
+nim	join	secureserver.html#join,SecureRestServerRef	proc join(rs: SecureRestServerRef): InternalRaisesFuture[void, (CancelledError,)]		110

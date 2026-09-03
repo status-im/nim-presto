@@ -1,0 +1,13 @@
+nimTitle	btrees	presto/btrees.html	module presto/btrees		0
+nim	BTree	presto/btrees.html#BTree	object BTree		29
+nim	initBTree	presto/btrees.html#initBTree	proc initBTree[Key, Val](): BTree[Key, Val]		33
+nim	getOrDefault	presto/btrees.html#getOrDefault,BTree[Key,Val],Key	proc getOrDefault[Key, Val](b: BTree[Key, Val]; key: Key): Val		39
+nim	getOrDefault	presto/btrees.html#getOrDefault,BTree[Key,Val],Key,Val	proc getOrDefault[Key, Val](b: BTree[Key, Val]; key: Key; default: Val): Val		50
+nim	contains	presto/btrees.html#contains,BTree[Key,Val],Key	proc contains[Key, Val](b: BTree[Key, Val]; key: Key): bool		62
+nim	add	presto/btrees.html#add,BTree[Key,Val],Key,Val	proc add[Key, Val](b: var BTree[Key, Val]; key: Key; val: Val)		128
+nim	`$`	presto/btrees.html#$,BTree[Key,Val]	proc `$`[Key, Val](b: BTree[Key, Val]): string		151
+nim	hasNext	presto/btrees.html#hasNext,BTree[Key,Val],int	proc hasNext[Key, Val](b: BTree[Key, Val]; index: int): bool		155
+nim	next	presto/btrees.html#next,BTree[Key,Val],int	proc next[Key, Val](b: BTree[Key, Val]; index: int): (Key, Val, int)		166
+nim	pairs	presto/btrees.html#pairs.i,BTree[Key,Val]	iterator pairs[Key, Val](b: BTree[Key, Val]): (Key, Val)		181
+nim	len	presto/btrees.html#len,BTree[Key,Val]	proc len[Key, Val](b: BTree[Key, Val]): int		188
+nimgrp	getordefault	presto/btrees.html#getOrDefault-procs-all	proc		39

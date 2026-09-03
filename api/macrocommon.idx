@@ -1,0 +1,13 @@
+nimTitle	macrocommon	macrocommon.html	module presto/macrocommon		0
+nim	makeProcName	macrocommon.html#makeProcName,string,string	proc makeProcName(m, s: string): string		14
+nim	getRestReturnType	macrocommon.html#getRestReturnType,NimNode	proc getRestReturnType(params: NimNode): NimNode		39
+nim	paramsIter	macrocommon.html#paramsIter.i,NimNode	iterator paramsIter(params: NimNode): tuple[name, ntype: NimNode]		46
+nim	isKnownType	macrocommon.html#isKnownType,NimNode,varargs[string]	proc isKnownType(typeNode: NimNode; typeNames: varargs[string]): bool		53
+nim	isOptionalArg	macrocommon.html#isOptionalArg,NimNode	proc isOptionalArg(typeNode: NimNode): bool		77
+nim	isBytesArg	macrocommon.html#isBytesArg,NimNode	proc isBytesArg(typeNode: NimNode): bool		80
+nim	isSequenceArg	macrocommon.html#isSequenceArg,NimNode	proc isSequenceArg(typeNode: NimNode): bool		83
+nim	isContentBodyArg	macrocommon.html#isContentBodyArg,NimNode	proc isContentBodyArg(typeNode: NimNode): bool		86
+nim	isResponseArg	macrocommon.html#isResponseArg,NimNode	proc isResponseArg(typeNode: NimNode): bool		89
+nim	getSequenceType	macrocommon.html#getSequenceType,NimNode	proc getSequenceType(typeNode: NimNode): NimNode		92
+nim	getOptionType	macrocommon.html#getOptionType,NimNode	proc getOptionType(typeNode: NimNode): NimNode		98
+nim	isPathArg	macrocommon.html#isPathArg,NimNode	proc isPathArg(typeNode: NimNode): bool		104

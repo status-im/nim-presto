@@ -1,0 +1,2 @@
+nimTitle	middleware	middleware.html	module presto/middleware		0
+nim	new	middleware.html#new,typedesc[RestServerMiddlewareRef],RestRouter,RestRequestErrorHandler	proc new(t: typedesc[RestServerMiddlewareRef]; router: RestRouter;\n    errorHandler: RestRequestErrorHandler = nil): HttpServerMiddlewareRef		16
