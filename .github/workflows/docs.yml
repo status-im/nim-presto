@@ -36,6 +36,7 @@ jobs:
 
       - name: Compile examples
         run: |
+          nimble install -dy
           nimble examples
 
       - name: Generate docs
