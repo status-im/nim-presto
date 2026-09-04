@@ -182,7 +182,13 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="quickstart"><a class="header" href="#quickstart">Quickstart</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="quickstart.html#installation">Installation</a></li>
+<li><a href="quickstart.html#a-minimal-server">A minimal server</a></li>
+<li><a href="quickstart.html#calling-it-from-a-client">Calling it from a client</a></li>
+<li><a href="quickstart.html#api-docs">API Docs</a></li>
+<li><a href="quickstart.html#where-to-go-next">Where to go next</a></li>
+</ul>
 <p>Presto is an asynchronous REST framework for <a href="https://nim-lang.org/">Nim</a>,
 built on top of the <a href="https://github.com/status-im/nim-chronos">Chronos</a> async
 I/O library. It gives you a request router, an HTTP (and HTTPS) server to run it
@@ -211,21 +217,38 @@ request parameters are automatically unmarshalled into Nim types;</li>
 greeting.</p>
 <p>Presto calls a user-supplied <code>decodeString</code> to turn path and query parameters
 into Nim values. Provide one for every type you accept as a parameter.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:decode}}
+<pre><code class="language-nim">proc decodeString*(t: typedesc[string], value: string): RestResult[string] =
+  ok(value)
 </code></pre>
 <p><a href="api/presto/route.html#init%2Ctypedesc%5BRestRouter%5D%2CPatternCallback"><code>RestRouter.init</code></a>
 always takes a validation callback. It is invoked for every <code>{pattern}</code> segment
 in a route; returning <code>0</code> accepts the value and any other value rejects the
 request. If you don't need validation, return <code>0</code> for everything.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:validate}}
+<pre><code class="language-nim">proc validate(pattern: string, value: string): int = 0
 </code></pre>
 <p>With those in place, declare a route with the
 <a href="api/presto/route.html#api-macros-all"><code>api</code></a> macro and serve the router:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:server}}
+<pre><code class="language-nim">var router = RestRouter.init(validate)
+
+router.api(MethodGet, "/") do () -&gt; RestApiResponse:
+  RestApiResponse.response("Hello World", Http200, "text/plain")
+
+let server = RestServerRef.new(router, initTAddress("127.0.0.1:9000")).get()
+server.start()
+runForever()
 </code></pre>
-<pre><code class="language-admonish note">`RestRouter.init` always requires a validation callback — see
-[Routing](./routing.md) for details on patterns and validation.
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="quickstart.html#admonition-note"></a>
+</div>
+<div>
+<p><code>RestRouter.init</code> always requires a validation callback — see
+<a href="./routing.html">Routing</a> for details on patterns and validation.</p>
+</div>
+</div>
 <h2 id="calling-it-from-a-client"><a class="header" href="#calling-it-from-a-client">Calling it from a client</a></h2>
 <p>Presto can generate a client procedure straight from a signature. The
 <a href="api/client.html#rest-macros-all"><code>rest</code></a> macro reads the <code>endpoint</code> and <code>meth</code>
@@ -233,7 +256,24 @@ pragmas and produces an async proc that performs the request and decodes the
 response.</p>
 <p>The client lives in the <a href="api/client.html"><code>presto/client</code></a> module, and calls a
 user-supplied <code>decodeBytes</code> to turn the response body into a Nim value.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_client.nim}}
+<pre><code class="language-nim">import pkg/presto/[common, client]
+
+proc decodeBytes*(t: typedesc[string], value: openArray[byte],
+                  contentType: Opt[ContentTypeData]): RestResult[string] =
+  var res: string
+  if len(value) &gt; 0:
+    res = newString(len(value))
+    copyMem(addr res[0], unsafeAddr value[0], len(value))
+  ok(res)
+
+proc getRoot(): string {.rest, endpoint: "/", meth: MethodGet.}
+
+proc main() {.async.} =
+  let client = RestClientRef.new(initTAddress("127.0.0.1:9000"))
+  echo await client.getRoot()
+  await client.closeWait()
+
+waitFor main()
 </code></pre>
 <h2 id="api-docs"><a class="header" href="#api-docs">API Docs</a></h2>
 <ul>
@@ -258,8 +298,16 @@ HTTP server.</li>
 <li><a href="./advanced.html">CORS and metrics</a> — cross-origin support and Prometheus
 metrics.</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="routing"><a class="header" href="#routing">Routing</a></h1>
-<!-- toc -->
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/quickstart.md">Edit this page on GitHub.</a></footer><div style="break-before: page; page-break-before: always;"></div><h1 id="routing"><a class="header" href="#routing">Routing</a></h1>
+<ul>
+<li><a href="routing.html#creating-a-router">Creating a router</a></li>
+<li><a href="routing.html#declaring-routes">Declaring routes</a></li>
+<li><a href="routing.html#encoding-and-decoding-parameters">Encoding and decoding parameters</a></li>
+<li><a href="routing.html#building-responses">Building responses</a></li>
+<li><a href="routing.html#content-negotiation">Content negotiation</a></li>
+<li><a href="routing.html#raw-routes">Raw routes</a></li>
+<li><a href="routing.html#redirecting-routes">Redirecting routes</a></li>
+</ul>
 <p>Routing is the core of Presto. A <a href="api/presto/route.html#RestRouter"><code>RestRouter</code></a>
 maps incoming HTTP requests identified by method and path to handler
 procedures, unmarshalling request parameters into Nim types along the way.</p>
@@ -269,14 +317,21 @@ takes a <em>pattern-validation callback</em>. This callback is invoked for every
 segment that corresponds to a <code>{pattern}</code> in a route, letting you reject
 malformed input before the handler runs. It returns <code>0</code> when the value is
 acceptable and any non-zero value to reject the request.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:validate}}
+<pre><code class="language-nim">proc validate(pattern: string, value: string): int =
+  case pattern
+  of "{id}":
+    # only accept numeric ids
+    if value.allCharsInSet({'0' .. '9'}): 0 else: 1
+  else:
+    1
 </code></pre>
 <p>If you don't need validation, provide a callback that always returns <code>0</code>.</p>
 <h2 id="declaring-routes"><a class="header" href="#declaring-routes">Declaring routes</a></h2>
 <p>Routes are declared with the <a href="api/presto/route.html#api-macros-all"><code>api</code></a> macro
 using Nim's <code>do</code> notation. The handler's return type must be
 <a href="api/presto/common.html#RestApiResponse"><code>RestApiResponse</code></a>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:ping}}
+<pre><code class="language-nim">router.api(MethodGet, "/ping") do () -&gt; RestApiResponse:
+  RestApiResponse.response("pong", Http200, "text/plain")
 </code></pre>
 <p>The handler's <em>parameters</em> describe what Presto should extract from the request.
 Presto inspects their names and types and generates the extraction and decoding
@@ -285,35 +340,72 @@ code for you.</p>
 <p>A segment written as <code>{name}</code> in the route path becomes a required parameter of
 the same name. Path parameters are decoded into a <code>Result[T, cstring]</code>, so you
 can check them with<code>isErr()</code> / <code>error()</code> and read the value with <code>get()</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:path}}
+<pre><code class="language-nim">router.api(MethodGet, "/users/{id}") do (id: int) -&gt; RestApiResponse:
+  if id.isErr():
+    return RestApiResponse.error(Http400, $id.error())
+  RestApiResponse.response("user " &amp; $id.get())
 </code></pre>
 <h3 id="query-parameters"><a class="header" href="#query-parameters">Query parameters</a></h3>
 <p>Parameters that are <em>not</em> part of the path become query-string parameters. Use
 <code>Option[T]</code> for an optional value and <code>seq[T]</code> to collect a repeated key.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:query}}
+<pre><code class="language-nim">router.api(MethodGet, "/search") do (
+    q: Option[string], tag: seq[string]) -&gt; RestApiResponse:
+  # q is Option[Result[string]]: present? then decoded?
+  let query =
+    if q.isSome(): q.get().get() else: ""
+  # tag collects ?tag=a&amp;tag=b&amp;tag=c into @["a", "b", "c"]
+  RestApiResponse.response("searching " &amp; query &amp; " in " &amp; $tag)
 </code></pre>
-<pre><code class="language-admonish note">Optional query parameters have type `Option[Result[T, cstring]]`: the outer
-`Option` tells you whether the key was present, and the inner `Result` tells you
-whether decoding succeeded. A `seq[T]` parameter is instead a single
-`Result[seq[T], cstring]`, and is empty when the key is absent.
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="routing.html#admonition-note"></a>
+</div>
+<div>
+<p>Optional query parameters have type <code>Option[Result[T, cstring]]</code>: the outer
+<code>Option</code> tells you whether the key was present, and the inner <code>Result</code> tells you
+whether decoding succeeded. A <code>seq[T]</code> parameter is instead a single
+<code>Result[seq[T], cstring]</code>, and is empty when the key is absent.</p>
+</div>
+</div>
 <h3 id="the-request-body"><a class="header" href="#the-request-body">The request body</a></h3>
 <p>Add an argument of type <a href="api/presto/common.html#ContentBody"><code>Option[ContentBody]</code></a>
 to receive the raw request body (available for <code>POST</code>, <code>PUT</code>, <code>PATCH</code> and
 <code>DELETE</code>). The name of the argument is up to you.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:body}}
+<pre><code class="language-nim">router.api(MethodPost, "/echo") do (
+    contentBody: Option[ContentBody]) -&gt; RestApiResponse:
+  if contentBody.isNone():
+    return RestApiResponse.error(Http400, "body required")
+  let body = contentBody.get()
+  echo "content-type: ", body.contentType
+  RestApiResponse.response(string.fromBytes(body.data))
 </code></pre>
 <h3 id="the-response-object"><a class="header" href="#the-response-object">The response object</a></h3>
 <p>Add an argument of type <code>HttpResponseRef</code> to take over the response yourself, e.g. to stream a body with <code>sendBody</code>. You may still return a <code>RestApiResponse</code>; if you have already responded, Presto will not send anything further.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:resp}}
+<pre><code class="language-nim">router.api(MethodGet, "/stream") do (
+    resp: HttpResponseRef) -&gt; RestApiResponse:
+  await resp.sendBody("streamed")
+  RestApiResponse.response("")  # ignored: already responded
 </code></pre>
 <h3 id="reserved-keywords-as-parameter-names"><a class="header" href="#reserved-keywords-as-parameter-names">Reserved keywords as parameter names</a></h3>
 <p>Parameter names coming from the URL may collide with Nim keywords. Quote them with backticks:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:keyword}}
+<pre><code class="language-nim">router.api(MethodGet, "/kw/{type}") do (`type`: string) -&gt; RestApiResponse:
+  RestApiResponse.response(`type`.get())
 </code></pre>
-<pre><code class="language-admonish warning title=&quot;Path length limit&quot;">A path may contain at most 64 segments. Requests with more segments are rejected
-with `400 Bad Request`.
-</code></pre>
+<div id="admonition-path-length-limit" class="admonition admonish-warning" role="note" aria-labelledby="admonition-path-length-limit-title">
+<div class="admonition-title">
+<div id="admonition-path-length-limit-title">
+<p>Path length limit</p>
+</div>
+<a class="admonition-anchor-link" href="routing.html#admonition-path-length-limit"></a>
+</div>
+<div>
+<p>A path may contain at most 64 segments. Requests with more segments are rejected
+with <code>400 Bad Request</code>.</p>
+</div>
+</div>
 <h2 id="encoding-and-decoding-parameters"><a class="header" href="#encoding-and-decoding-parameters">Encoding and decoding parameters</a></h2>
 <p>Presto does not assume any particular serialization format. Instead, it calls
 user-supplied procedures to convert between wire representations and Nim values.
@@ -326,12 +418,26 @@ You must provide these for every type you use as a parameter, body, or response.
 </tbody></table>
 </div>
 <p>A minimal <code>decodeString</code> for <code>int</code> on the server side:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:decode_int}}
+<pre><code class="language-nim">proc decodeString*(t: typedesc[int], value: string): RestResult[int] =
+  var v: int
+  if parseSaturatedNatural(value, v) == 0:
+    err("Unable to decode decimal string")
+  else:
+    ok(v)
 </code></pre>
-<pre><code class="language-admonish tip">By convention, `seq[byte]` values are encoded as hex strings (for example
-`0x7465737431` decodes to `"test1"`). This lets you pass binary data safely
-through URLs.
-</code></pre>
+<div id="admonition-tip" class="admonition admonish-tip" role="note" aria-labelledby="admonition-tip-title">
+<div class="admonition-title">
+<div id="admonition-tip-title">
+<p>Tip</p>
+</div>
+<a class="admonition-anchor-link" href="routing.html#admonition-tip"></a>
+</div>
+<div>
+<p>By convention, <code>seq[byte]</code> values are encoded as hex strings (for example
+<code>0x7465737431</code> decodes to <code>"test1"</code>). This lets you pass binary data safely
+through URLs.</p>
+</div>
+</div>
 <p>Custom and generic types work the same way: you decide how they map to
 strings and bytes. See <code>tests/helpers.nim</code> in the repository for a complete set
 of encoders/decoders covering integers, strings, byte sequences, and custom
@@ -342,49 +448,84 @@ constructors, each with several overloads.</p>
 <h3 id="content-responses"><a class="header" href="#content-responses">Content responses</a></h3>
 <p>The <a href="api/presto/common.html#response-procs-all"><code>response</code></a> constructor sends a
 body:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:responses}}
+<pre><code class="language-nim">discard RestApiResponse.response("hello")                       # 200, text/plain
+discard RestApiResponse.response("{}", Http201, "application/json")
+discard RestApiResponse.response("body", Http200,
+                                 headers = [("X-Custom", "1")])  # extra headers
+discard RestApiResponse.response(Http204)                        # no body
 </code></pre>
 <h3 id="error-responses"><a class="header" href="#error-responses">Error responses</a></h3>
 <p>The <a href="api/presto/common.html#error-procs-all"><code>error</code></a> constructor sends an error
 status with an optional message:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:errors}}
+<pre><code class="language-nim">discard RestApiResponse.error(Http404, "not found")
+discard RestApiResponse.error(Http500, "boom", "text/plain",
+                              headers = [("Retry-After", "5")])
 </code></pre>
 <h3 id="redirects"><a class="header" href="#redirects">Redirects</a></h3>
 <p>The <a href="api/presto/common.html#redirect-procs-all"><code>redirect</code></a> constructor issues an
 HTTP redirect:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:redirects}}
+<pre><code class="language-nim">discard RestApiResponse.redirect(Http307, "/new/location")
+discard RestApiResponse.redirect(Http307, "/new/location", preserveQuery = true)
 </code></pre>
 <p>When <code>preserveQuery</code> is <code>true</code>, the original request's query string is merged
 into the redirect target.</p>
-<pre><code class="language-admonish note">When you pass headers and a `contentType`, the explicit `contentType` argument
-wins over any `Content-Type` present in the headers table. The same applies to
-the `Location` header for redirects.
-</code></pre>
+<div id="admonition-note-1" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-1-title">
+<div class="admonition-title">
+<div id="admonition-note-1-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="routing.html#admonition-note-1"></a>
+</div>
+<div>
+<p>When you pass headers and a <code>contentType</code>, the explicit <code>contentType</code> argument
+wins over any <code>Content-Type</code> present in the headers table. The same applies to
+the <code>Location</code> header for redirects.</p>
+</div>
+</div>
 <h2 id="content-negotiation"><a class="header" href="#content-negotiation">Content negotiation</a></h2>
 <p>Inside a handler you can inspect the client's <code>Accept</code> header and pick a
 supported media type with <code>preferredContentType</code>. It returns a <code>Result</code>; when
 nothing matches, respond with <code>406 Not Acceptable</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:negotiate}}
+<pre><code class="language-nim">const
+  typeJson = MediaType.init("application/json")
+  typeText = MediaType.init("text/plain")
+
+router.api(MethodGet, "/negotiate") do () -&gt; RestApiResponse:
+  let preferred = preferredContentType(typeJson, typeText)
+  if preferred.isErr():
+    return RestApiResponse.error(Http406, "")
+  if preferred.get() == typeJson:
+    RestApiResponse.response("{}", Http200, "application/json")
+  else:
+    RestApiResponse.response("ok", Http200, "text/plain")
 </code></pre>
 <h2 id="raw-routes"><a class="header" href="#raw-routes">Raw routes</a></h2>
 <p>Sometimes you want the request untouched: no body decoding, direct access to
 <code>HttpRequestRef</code>. Use <a href="api/presto/route.html#rawApi-macros-all"><code>rawApi</code></a> instead
 of <code>api</code>. Raw handlers receive the <code>request</code> symbol in scope.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:raw}}
+<pre><code class="language-nim">router.rawApi(MethodPost, "/raw") do () -&gt; RestApiResponse:
+  let contentType = request.headers.getString("content-type")
+  let body = await request.getBody()
+  RestApiResponse.response("got " &amp; $len(body) &amp; " bytes of " &amp; contentType)
 </code></pre>
 <h2 id="redirecting-routes"><a class="header" href="#redirecting-routes">Redirecting routes</a></h2>
 <p>You can register a redirect from one route pattern to another compatible one
 with the <a href="api/presto/route.html#redirect-macros-all"><code>redirect</code></a> macro. Both
 patterns must contain the same set of <code>{names}</code> (they may appear in a different
 order).</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/routing.nim:route_redirect}}
+<pre><code class="language-nim">router.redirect(MethodGet, "/old/{id}", "/api/v2/items/{id}")
 </code></pre>
 <p>At the lower level,
 <a href="api/presto/route.html#addRoute-procs-all"><code>addRoute</code></a> and
 <a href="api/presto/route.html#addRedirect-procs-all"><code>addRedirect</code></a> register routes and
 redirects directly. Registering the same route twice raises a <code>Defect</code>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="server"><a class="header" href="#server">Server</a></h1>
-<!-- toc -->
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/routing.md">Edit this page on GitHub.</a></footer><div style="break-before: page; page-break-before: always;"></div><h1 id="server"><a class="header" href="#server">Server</a></h1>
+<ul>
+<li><a href="server.html#creating-a-server">Creating a server</a></li>
+<li><a href="server.html#lifecycle">Lifecycle</a></li>
+<li><a href="server.html#handling-errors">Handling errors</a></li>
+<li><a href="server.html#serving-over-https">Serving over HTTPS</a></li>
+</ul>
 <p>Once you have a <a href="./routing.html">router</a>, you serve it with a
 <a href="api/presto/server.html#RestServerRef"><code>RestServerRef</code></a>. The server owns a
 Chronos HTTP server, dispatches incoming requests through the router, and turns
@@ -394,7 +535,7 @@ return into real HTTP responses.</p>
 <p><a href="api/presto/server.html#new-procs-all"><code>RestServerRef.new</code></a> returns a <code>Result</code>,
 so unwrap it with <code>get()</code> (or handle the error). At minimum it needs a router
 and an address to bind to.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:create}}
+<pre><code class="language-nim">let server = RestServerRef.new(router, address).get()
 </code></pre>
 <h3 id="common-options"><a class="header" href="#common-options">Common options</a></h3>
 <p><code>new</code> accepts many keyword arguments; the most useful ones are:</p>
@@ -413,12 +554,18 @@ and an address to bind to.</p>
 </div>
 <p>The <code>errorType</code> parameter lets you choose whether construction failures are
 reported as <code>cstring</code> (the default) or <code>string</code>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:errortype}}
+<pre><code class="language-nim">let res = RestServerRef.new(router, address, errorType = string)
+if res.isErr():
+  echo "failed to start: ", res.error()
 </code></pre>
 <h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:lifecycle}}
+<pre><code class="language-nim">server.start()              # begin accepting connections
+echo server.state           # Running | Stopped | Closed
+echo server.localAddress()  # actual bound address (useful with port 0)
 </code></pre>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:shutdown}}
+<pre><code class="language-nim">await server.stop()         # stop accepting new connections
+await server.drop()         # drop pending connections
+await server.closeWait()    # stop and release all resources
 </code></pre>
 <p>The relevant procedures are
 <a href="api/presto/server.html#start-procs-all"><code>start</code></a>,
@@ -430,7 +577,12 @@ reported as <code>cstring</code> (the default) or <code>string</code>:</p>
 <a href="api/presto/server.html#localAddress-procs-all"><code>localAddress</code></a>.</p>
 <p>A typical test or short-lived program brackets its work with <code>start</code> and
 <code>closeWait</code>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_bracket.nim:bracket}}
+<pre><code class="language-nim">server.start()
+try:
+  # … issue requests …
+  discard
+finally:
+  await server.closeWait()
 </code></pre>
 <h2 id="handling-errors"><a class="header" href="#handling-errors">Handling errors</a></h2>
 <p>Some failures happen before or around your handler: a malformed request, an
@@ -440,9 +592,26 @@ them.</p>
 <p>The handler receives a
 <a href="api/presto/servercommon.html#RestRequestError"><code>RestRequestError</code></a> describing
 what went wrong and the <code>HttpRequestRef</code>, and returns an <code>HttpResponseRef</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_errorhandler.nim:handler}}
+<pre><code class="language-nim">proc onError(kind: RestRequestError,
+             request: HttpRequestRef): Future[HttpResponseRef] {.
+    async: (raises: [CancelledError]).} =
+  try:
+    case kind
+    of RestRequestError.Invalid:
+      await request.respond(Http400, "invalid request")
+    of RestRequestError.NotFound:
+      await request.respond(Http404, "no such endpoint")
+    of RestRequestError.InvalidContentBody:
+      await request.respond(Http400, "bad body")
+    of RestRequestError.InvalidContentType:
+      await request.respond(Http400, "bad content-type")
+    of RestRequestError.Unexpected:
+      defaultResponse()
+  except HttpError:
+    defaultResponse()
 </code></pre>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_errorhandler.nim:register}}
+<pre><code class="language-nim">let server = RestServerRef.new(
+  router, initTAddress("127.0.0.1:8080"), requestErrorHandler = onError).get()
 </code></pre>
 <p>The <code>RestRequestError</code> cases are:</p>
 <ul>
@@ -454,23 +623,42 @@ what went wrong and the <code>HttpRequestRef</code>, and returns an <code>HttpRe
 </ul>
 <p><code>defaultResponse()</code> returns Presto's built-in response and is handy as a
 fallback.</p>
-<pre><code class="language-admonish note">The error handler covers *framework* errors. Errors your own handler wants to
-report should be returned as `RestApiResponse.error(...)` instead (see
-[Building responses](./routing.md#building-responses)).
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="server.html#admonition-note"></a>
+</div>
+<div>
+<p>The error handler covers <em>framework</em> errors. Errors your own handler wants to
+report should be returned as <code>RestApiResponse.error(...)</code> instead (see
+<a href="./routing.html#building-responses">Building responses</a>).</p>
+</div>
+</div>
 <h2 id="serving-over-https"><a class="header" href="#serving-over-https">Serving over HTTPS</a></h2>
 <p>For TLS, use <a href="api/secureserver.html#SecureRestServerRef"><code>SecureRestServerRef</code></a>
 from <code>presto/secureserver</code>. It behaves exactly like <code>RestServerRef</code>—same
 routing, same responses—but additionally takes a TLS private key and
 certificate.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/secureserver.nim:secure}}
+<pre><code class="language-nim">let
+  key = TLSPrivateKey.init(myKeyPem)
+  cert = TLSCertificate.init(myCertPem)
+  server = SecureRestServerRef.new(
+    router, initTAddress("127.0.0.1:8443"), key, cert).get()
+
+server.start()
 </code></pre>
 <p><a href="api/secureserver.html#SecureRestServerRef"><code>SecureRestServerRef</code></a> supports the
 same lifecycle procedures (<code>start</code>, <code>stop</code>, <code>drop</code>, <code>closeWait</code>, <code>join</code>,
 <code>state</code>, <code>localAddress</code>) and the same <code>errorType</code> option as the plain server,
 plus a <code>secureFlags: set[TLSFlags]</code> argument for TLS-specific behavior.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="middleware"><a class="header" href="#middleware">Middleware</a></h1>
-<!-- toc -->
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/server.md">Edit this page on GitHub.</a></footer><div style="break-before: page; page-break-before: always;"></div><h1 id="middleware"><a class="header" href="#middleware">Middleware</a></h1>
+<ul>
+<li><a href="middleware.html#wrapping-a-router">Wrapping a router</a></li>
+<li><a href="middleware.html#the-fall-through-handler">The fall-through handler</a></li>
+<li><a href="middleware.html#chaining-multiple-routers">Chaining multiple routers</a></li>
+</ul>
 <p>Instead of running a Presto router with a dedicated
 <a href="api/presto/server.html#RestServerRef"><code>RestServerRef</code></a>, you can plug it into an
 existing Chronos HTTP server as <em>middleware</em>. This is useful when you already
@@ -485,7 +673,11 @@ in the chain.</p>
 <p>Create the middleware from a router with
 <a href="api/middleware.html#new-procs-all"><code>RestServerMiddlewareRef.new</code></a>, then pass it
 to <code>HttpServerRef.new</code> via the <code>middlewares</code> argument.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware.nim:wrap}}
+<pre><code class="language-nim">var router = RestRouter.init(validate)
+router.api(MethodGet, "/api/{id}") do (id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("item " &amp; $id.get())
+
+let restMiddleware = RestServerMiddlewareRef.new(router)
 </code></pre>
 <p>The middleware also accepts an optional <code>errorHandler</code> of the same
 <a href="api/presto/servercommon.html#RestRequestErrorHandler"><code>RestRequestErrorHandler</code></a>
@@ -494,20 +686,70 @@ type used by the <a href="./server.html#handling-errors">server</a>.</p>
 <p>The plain Chronos <code>HttpServerRef</code> still needs a <em>process callback</em>—the final
 handler that runs when no middleware matched the request. This is where you
 serve everything that isn't a REST route (or return a 404).</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware.nim:process}}
+<pre><code class="language-nim">proc process(r: RequestFence): Future[HttpResponseRef] {.
+    async: (raises: [CancelledError]).} =
+  if r.isOk():
+    let request = r.get()
+    if request.uri.path == "/health":
+      try:
+        await request.respond(Http200, "ok")
+      except HttpWriteError as exc:
+        defaultResponse(exc)
+    else:
+      defaultResponse()   # -&gt; 404
+  else:
+    defaultResponse()
+
+let server = HttpServerRef.new(
+  initTAddress("127.0.0.1:8080"), process,
+  middlewares = [restMiddleware]).get()
+server.start()
 </code></pre>
 <h2 id="chaining-multiple-routers"><a class="header" href="#chaining-multiple-routers">Chaining multiple routers</a></h2>
 <p>You can install several middlewares. They are tried in order; the first router
 that has a matching route handles the request, and anything unmatched falls
 through to the next middleware and finally to the process callback.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware_chain.nim:chain}}
+<pre><code class="language-nim">var
+  apiRouter = RestRouter.init(validate)
+  adminRouter = RestRouter.init(validate)
+
+apiRouter.api(MethodGet, "/api/{id}") do (id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("api")
+
+adminRouter.api(MethodPost, "/admin/{id}") do (
+    id: int, contentBody: Option[ContentBody]) -&gt; RestApiResponse:
+  RestApiResponse.response("admin")
+
+let server = HttpServerRef.new(
+  initTAddress("127.0.0.1:8080"), process,
+  middlewares = [
+    RestServerMiddlewareRef.new(apiRouter),
+    RestServerMiddlewareRef.new(adminRouter)
+  ]).get()
 </code></pre>
-<pre><code class="language-admonish tip">Because matching considers the HTTP method as well as the path, two routers can
+<div id="admonition-tip" class="admonition admonish-tip" role="note" aria-labelledby="admonition-tip-title">
+<div class="admonition-title">
+<div id="admonition-tip-title">
+<p>Tip</p>
+</div>
+<a class="admonition-anchor-link" href="middleware.html#admonition-tip"></a>
+</div>
+<div>
+<p>Because matching considers the HTTP method as well as the path, two routers can
 share the same path and be selected by the request method — for example one
-router handling `GET /resource` and another handling `POST /resource`.
-</code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="client"><a class="header" href="#client">Client</a></h1>
-<!-- toc -->
+router handling <code>GET /resource</code> and another handling <code>POST /resource</code>.</p>
+</div>
+</div>
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/middleware.md">Edit this page on GitHub.</a></footer><div style="break-before: page; page-break-before: always;"></div><h1 id="client"><a class="header" href="#client">Client</a></h1>
+<ul>
+<li><a href="client.html#declaring-client-procedures">Declaring client procedures</a></li>
+<li><a href="client.html#creating-a-client">Creating a client</a></li>
+<li><a href="client.html#calling-an-endpoint">Calling an endpoint</a></li>
+<li><a href="client.html#return-types">Return types</a></li>
+<li><a href="client.html#error-handling">Error handling</a></li>
+<li><a href="client.html#connection-handling">Connection handling</a></li>
+<li><a href="client.html#overloading">Overloading</a></li>
+</ul>
 <p>Presto ships with an HTTP client that is generated from your procedure
 signatures. You describe <em>what</em> a request looks like (its endpoint, method, and
 parameters) and the <a href="api/client.html#rest-macros-all"><code>rest</code></a> macro writes the
@@ -517,7 +759,9 @@ response into a Nim value. The client lives in the
 <h2 id="declaring-client-procedures"><a class="header" href="#declaring-client-procedures">Declaring client procedures</a></h2>
 <p>Annotate a procedure with <code>{.rest.}</code> and describe the request with pragmas. The
 proc must have no body; the macro supplies one.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:declare}}
+<pre><code class="language-nim">proc getUser(id: int): string {.rest, endpoint: "/users/{id}".}
+proc createUser(body: string): string {.
+     rest, endpoint: "/users", meth: MethodPost.}
 </code></pre>
 <p>Parameter names drive how each argument is used:</p>
 <ul>
@@ -543,7 +787,17 @@ See <a href="./routing.html#encoding-and-decoding-parameters">the encode/decode 
 <p><a href="api/client.html#new-procs-all"><code>RestClientRef.new</code></a> can be constructed from a
 <code>TransportAddress</code>, from an <code>HttpAddress</code>, or from a URL string. The URL form
 returns a <code>Result</code> because it resolves the host up front.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:create}}
+<pre><code class="language-nim"># from a transport address
+let client = RestClientRef.new(initTAddress("127.0.0.1:8080"))
+
+# from a URL (returns a Result)
+let client2 = RestClientRef.new("http://api.example.com/").get()
+
+# with flags
+let client3 = RestClientRef.new(
+  initTAddress("127.0.0.1:8080"),
+  HttpClientScheme.NonSecure,
+  flags = {RestClientFlag.CommaSeparatedArray})
 </code></pre>
 <p>Two <a href="api/client.html#RestClientFlag"><code>RestClientFlag</code></a>s tune behavior:</p>
 <ul>
@@ -556,7 +810,16 @@ the resolved address.</li>
 <p>The generated proc is <code>async</code> and takes your declared parameters plus three
 extra keyword arguments: <code>restContentType</code>, <code>restAcceptType</code>, and
 <code>extraHeaders</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:call}}
+<pre><code class="language-nim">let client = RestClientRef.new(initTAddress("127.0.0.1:8080"))
+
+let user = await client.getUser(42)
+
+let created = await client.createUser(
+  body = "{\"name\":\"Ada\"}",
+  restContentType = "application/json",
+  extraHeaders = @[("Authorization", "Bearer secret")])
+
+await client.closeWait()
 </code></pre>
 <p><code>restAcceptType</code> overrides the <code>accept</code> pragma at the call site and understands
 quality weights, e.g. <code>"app/type1;q=1.0,app/type2;q=0.1"</code>.</p>
@@ -572,16 +835,30 @@ errors are handled.</p>
 </tbody></table>
 </div>
 <p>Examples:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:returns}}
+<pre><code class="language-nim">proc getStatus(): RestStatus {.rest, endpoint: "/health".}
+proc getRaw(): RestPlainResponse {.rest, endpoint: "/blob".}
+proc getTyped(): RestResponse[int] {.rest, endpoint: "/count".}
+proc getStream(body: string): RestHttpResponseRef {.
+     rest, endpoint: "/download", meth: MethodPost, accept: "*/*".}
 </code></pre>
 <p>Reading a streaming response:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:stream}}
+<pre><code class="language-nim">let resp = await client.getStream("query")
+let reader = resp.getBodyReader()
+let chunk = await reader.read()
+await reader.closeWait()
+await resp.closeWait()
 </code></pre>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error handling</a></h2>
 <p>When a value-returning proc receives a non-2xx status it raises
 <a href="api/presto/common.html#RestResponseError"><code>RestResponseError</code></a>, which carries
 the details of the failed response.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:errors}}
+<pre><code class="language-nim">try:
+  let user = await client.getUser(99999)
+  discard user
+except RestResponseError as exc:
+  echo exc.status        # e.g. 404
+  echo exc.message       # response body as text
+  echo exc.contentType
 </code></pre>
 <p>Other exceptions the generated procs may raise include <code>RestEncodingError</code>
 (a parameter or body failed to encode), <code>RestDnsResolveError</code> (host resolution
@@ -596,21 +873,26 @@ call:</p>
 <li><code>{}</code> or <code>{Dedicated}</code> — keep the connection open for reuse.</li>
 <li><code>{Close}</code> — close the connection after the request.</li>
 </ul>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:conn}}
+<pre><code class="language-nim">proc oneShot(): RestPlainResponse {.
+     rest, endpoint: "/once", connection: {Close}.}
 </code></pre>
 <h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
 <p>Because the macro produces ordinary procedures, you can overload the same
 endpoint with different parameter sets, e.g. a queryless variant and
 one that takes filters, and let Nim's overload resolution pick between them at
 the call site.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="cors-and-metrics"><a class="header" href="#cors-and-metrics">CORS and metrics</a></h1>
-<!-- toc -->
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/client.md">Edit this page on GitHub.</a></footer><div style="break-before: page; page-break-before: always;"></div><h1 id="cors-and-metrics"><a class="header" href="#cors-and-metrics">CORS and metrics</a></h1>
+<ul>
+<li><a href="cors_metrics.html#cors">CORS</a></li>
+<li><a href="cors_metrics.html#metrics">Metrics</a></li>
+</ul>
 <h2 id="cors"><a class="header" href="#cors">CORS</a></h2>
 <p>Browsers restrict cross-origin requests unless the server opts in with the
 appropriate <code>Access-Control-Allow-Origin</code> header. Presto handles this at the
 router level: pass an <code>allowedOrigin</code> when you initialize the router with
 <a href="api/presto/route.html#init%2Ctypedesc%5BRestRouter%5D%2CPatternCallback"><code>RestRouter.init</code></a>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_cors.nim:cors}}
+<pre><code class="language-nim">var router = RestRouter.init(
+  validate, allowedOrigin = some("https://app.example.com"))
 </code></pre>
 <p>When <code>allowedOrigin</code> is set, Presto:</p>
 <ul>
@@ -628,9 +910,18 @@ value may be given with or without an <code>http://</code> / <code>https://</cod
 <li>A request carrying more than one <code>Origin</code> header is rejected with
 <code>400 Bad Request</code>.</li>
 </ul>
-<pre><code class="language-admonish note">`allowedOrigin` is applied by the router and the server together. If you serve a
-router as [middleware](./middleware.md), the same CORS behavior applies.
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="cors_metrics.html#admonition-note"></a>
+</div>
+<div>
+<p><code>allowedOrigin</code> is applied by the router and the server together. If you serve a
+router as <a href="./middleware.html">middleware</a>, the same CORS behavior applies.</p>
+</div>
+</div>
 <h2 id="metrics"><a class="header" href="#metrics">Metrics</a></h2>
 <p>Presto can expose operational metrics through the
 <a href="https://github.com/status-im/nim-metrics">nim-metrics</a> library. Metrics
@@ -649,7 +940,14 @@ macros. Pass a set of
 <a href="api/presto/common.html#RestServerMetricsType"><code>RestServerMetricsType</code></a> values
 (<code>Status</code>, <code>Response</code>, or the combined <code>RestServerMetrics</code>) to
 <a href="api/presto/route.html#metricsApi-macros-all"><code>metricsApi</code></a>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_metrics_server.nim:metrics}}
+<pre><code class="language-nim">router.metricsApi(MethodGet, "/items/{id}",
+                  {RestServerMetricsType.Status}) do (
+    id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("item")
+
+# record both status counts and response timing
+router.metricsApi(MethodGet, "/report", RestServerMetrics) do () -&gt; RestApiResponse:
+  RestApiResponse.response("ok")
 </code></pre>
 <p>A <a href="api/presto/route.html#rawMetricsApi-macros-all"><code>rawMetricsApi</code></a> variant
 exists for raw handlers, mirroring <a href="./routing.html#raw-routes"><code>rawApi</code></a>.</p>
@@ -658,13 +956,25 @@ exists for raw handlers, mirroring <a href="./routing.html#raw-routes"><code>raw
 <a href="api/client.html#metrics-templates-all"><code>metrics</code></a> pragma. The client can record
 DNS resolution time, connection time, request time, response time, and response
 status, each labelled by an endpoint name.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_metrics_client.nim:metrics}}
+<pre><code class="language-nim"># use the endpoint path as the metric label
+proc getItem(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics.}
+
+# override the label
+proc getItem2(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics: "items_by_id".}
+
+# select which metrics to collect
+proc getItem3(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics,
+     metricsTypes: {RestClientMetricsType.ResponseTime,
+                    RestClientMetricsType.Status}.}
 </code></pre>
 <p>The available <a href="api/client.html#RestClientMetricsType"><code>RestClientMetricsType</code></a>
 values are <code>ResolveTime</code>, <code>ConnectTime</code>, <code>RequestTime</code>, <code>ResponseTime</code>, and
 <code>Status</code>; <code>RestClientMetricsAllTypes</code> is the full set and is used when
 <code>metricsTypes</code> is omitted.</p>
-
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/cors_metrics.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

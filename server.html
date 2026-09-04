@@ -181,7 +181,12 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="server"><a class="header" href="#server">Server</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="#creating-a-server">Creating a server</a></li>
+<li><a href="#lifecycle">Lifecycle</a></li>
+<li><a href="#handling-errors">Handling errors</a></li>
+<li><a href="#serving-over-https">Serving over HTTPS</a></li>
+</ul>
 <p>Once you have a <a href="./routing.html">router</a>, you serve it with a
 <a href="api/presto/server.html#RestServerRef"><code>RestServerRef</code></a>. The server owns a
 Chronos HTTP server, dispatches incoming requests through the router, and turns
@@ -191,7 +196,7 @@ return into real HTTP responses.</p>
 <p><a href="api/presto/server.html#new-procs-all"><code>RestServerRef.new</code></a> returns a <code>Result</code>,
 so unwrap it with <code>get()</code> (or handle the error). At minimum it needs a router
 and an address to bind to.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:create}}
+<pre><code class="language-nim">let server = RestServerRef.new(router, address).get()
 </code></pre>
 <h3 id="common-options"><a class="header" href="#common-options">Common options</a></h3>
 <p><code>new</code> accepts many keyword arguments; the most useful ones are:</p>
@@ -210,12 +215,18 @@ and an address to bind to.</p>
 </div>
 <p>The <code>errorType</code> parameter lets you choose whether construction failures are
 reported as <code>cstring</code> (the default) or <code>string</code>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:errortype}}
+<pre><code class="language-nim">let res = RestServerRef.new(router, address, errorType = string)
+if res.isErr():
+  echo "failed to start: ", res.error()
 </code></pre>
 <h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:lifecycle}}
+<pre><code class="language-nim">server.start()              # begin accepting connections
+echo server.state           # Running | Stopped | Closed
+echo server.localAddress()  # actual bound address (useful with port 0)
 </code></pre>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server.nim:shutdown}}
+<pre><code class="language-nim">await server.stop()         # stop accepting new connections
+await server.drop()         # drop pending connections
+await server.closeWait()    # stop and release all resources
 </code></pre>
 <p>The relevant procedures are
 <a href="api/presto/server.html#start-procs-all"><code>start</code></a>,
@@ -227,7 +238,12 @@ reported as <code>cstring</code> (the default) or <code>string</code>:</p>
 <a href="api/presto/server.html#localAddress-procs-all"><code>localAddress</code></a>.</p>
 <p>A typical test or short-lived program brackets its work with <code>start</code> and
 <code>closeWait</code>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_bracket.nim:bracket}}
+<pre><code class="language-nim">server.start()
+try:
+  # … issue requests …
+  discard
+finally:
+  await server.closeWait()
 </code></pre>
 <h2 id="handling-errors"><a class="header" href="#handling-errors">Handling errors</a></h2>
 <p>Some failures happen before or around your handler: a malformed request, an
@@ -237,9 +253,26 @@ them.</p>
 <p>The handler receives a
 <a href="api/presto/servercommon.html#RestRequestError"><code>RestRequestError</code></a> describing
 what went wrong and the <code>HttpRequestRef</code>, and returns an <code>HttpResponseRef</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_errorhandler.nim:handler}}
+<pre><code class="language-nim">proc onError(kind: RestRequestError,
+             request: HttpRequestRef): Future[HttpResponseRef] {.
+    async: (raises: [CancelledError]).} =
+  try:
+    case kind
+    of RestRequestError.Invalid:
+      await request.respond(Http400, "invalid request")
+    of RestRequestError.NotFound:
+      await request.respond(Http404, "no such endpoint")
+    of RestRequestError.InvalidContentBody:
+      await request.respond(Http400, "bad body")
+    of RestRequestError.InvalidContentType:
+      await request.respond(Http400, "bad content-type")
+    of RestRequestError.Unexpected:
+      defaultResponse()
+  except HttpError:
+    defaultResponse()
 </code></pre>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/server_errorhandler.nim:register}}
+<pre><code class="language-nim">let server = RestServerRef.new(
+  router, initTAddress("127.0.0.1:8080"), requestErrorHandler = onError).get()
 </code></pre>
 <p>The <code>RestRequestError</code> cases are:</p>
 <ul>
@@ -251,22 +284,37 @@ what went wrong and the <code>HttpRequestRef</code>, and returns an <code>HttpRe
 </ul>
 <p><code>defaultResponse()</code> returns Presto's built-in response and is handy as a
 fallback.</p>
-<pre><code class="language-admonish note">The error handler covers *framework* errors. Errors your own handler wants to
-report should be returned as `RestApiResponse.error(...)` instead (see
-[Building responses](./routing.md#building-responses)).
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-note"></a>
+</div>
+<div>
+<p>The error handler covers <em>framework</em> errors. Errors your own handler wants to
+report should be returned as <code>RestApiResponse.error(...)</code> instead (see
+<a href="./routing.html#building-responses">Building responses</a>).</p>
+</div>
+</div>
 <h2 id="serving-over-https"><a class="header" href="#serving-over-https">Serving over HTTPS</a></h2>
 <p>For TLS, use <a href="api/secureserver.html#SecureRestServerRef"><code>SecureRestServerRef</code></a>
 from <code>presto/secureserver</code>. It behaves exactly like <code>RestServerRef</code>—same
 routing, same responses—but additionally takes a TLS private key and
 certificate.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/secureserver.nim:secure}}
+<pre><code class="language-nim">let
+  key = TLSPrivateKey.init(myKeyPem)
+  cert = TLSCertificate.init(myCertPem)
+  server = SecureRestServerRef.new(
+    router, initTAddress("127.0.0.1:8443"), key, cert).get()
+
+server.start()
 </code></pre>
 <p><a href="api/secureserver.html#SecureRestServerRef"><code>SecureRestServerRef</code></a> supports the
 same lifecycle procedures (<code>start</code>, <code>stop</code>, <code>drop</code>, <code>closeWait</code>, <code>join</code>,
 <code>state</code>, <code>localAddress</code>) and the same <code>errorType</code> option as the plain server,
 plus a <code>secureFlags: set[TLSFlags]</code> argument for TLS-specific behavior.</p>
-
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/server.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

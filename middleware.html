@@ -181,7 +181,11 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="middleware"><a class="header" href="#middleware">Middleware</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="#wrapping-a-router">Wrapping a router</a></li>
+<li><a href="#the-fall-through-handler">The fall-through handler</a></li>
+<li><a href="#chaining-multiple-routers">Chaining multiple routers</a></li>
+</ul>
 <p>Instead of running a Presto router with a dedicated
 <a href="api/presto/server.html#RestServerRef"><code>RestServerRef</code></a>, you can plug it into an
 existing Chronos HTTP server as <em>middleware</em>. This is useful when you already
@@ -196,7 +200,11 @@ in the chain.</p>
 <p>Create the middleware from a router with
 <a href="api/middleware.html#new-procs-all"><code>RestServerMiddlewareRef.new</code></a>, then pass it
 to <code>HttpServerRef.new</code> via the <code>middlewares</code> argument.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware.nim:wrap}}
+<pre><code class="language-nim">var router = RestRouter.init(validate)
+router.api(MethodGet, "/api/{id}") do (id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("item " &amp; $id.get())
+
+let restMiddleware = RestServerMiddlewareRef.new(router)
 </code></pre>
 <p>The middleware also accepts an optional <code>errorHandler</code> of the same
 <a href="api/presto/servercommon.html#RestRequestErrorHandler"><code>RestRequestErrorHandler</code></a>
@@ -205,19 +213,61 @@ type used by the <a href="./server.html#handling-errors">server</a>.</p>
 <p>The plain Chronos <code>HttpServerRef</code> still needs a <em>process callback</em>—the final
 handler that runs when no middleware matched the request. This is where you
 serve everything that isn't a REST route (or return a 404).</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware.nim:process}}
+<pre><code class="language-nim">proc process(r: RequestFence): Future[HttpResponseRef] {.
+    async: (raises: [CancelledError]).} =
+  if r.isOk():
+    let request = r.get()
+    if request.uri.path == "/health":
+      try:
+        await request.respond(Http200, "ok")
+      except HttpWriteError as exc:
+        defaultResponse(exc)
+    else:
+      defaultResponse()   # -&gt; 404
+  else:
+    defaultResponse()
+
+let server = HttpServerRef.new(
+  initTAddress("127.0.0.1:8080"), process,
+  middlewares = [restMiddleware]).get()
+server.start()
 </code></pre>
 <h2 id="chaining-multiple-routers"><a class="header" href="#chaining-multiple-routers">Chaining multiple routers</a></h2>
 <p>You can install several middlewares. They are tried in order; the first router
 that has a matching route handles the request, and anything unmatched falls
 through to the next middleware and finally to the process callback.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/middleware_chain.nim:chain}}
-</code></pre>
-<pre><code class="language-admonish tip">Because matching considers the HTTP method as well as the path, two routers can
-share the same path and be selected by the request method — for example one
-router handling `GET /resource` and another handling `POST /resource`.
-</code></pre>
+<pre><code class="language-nim">var
+  apiRouter = RestRouter.init(validate)
+  adminRouter = RestRouter.init(validate)
 
+apiRouter.api(MethodGet, "/api/{id}") do (id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("api")
+
+adminRouter.api(MethodPost, "/admin/{id}") do (
+    id: int, contentBody: Option[ContentBody]) -&gt; RestApiResponse:
+  RestApiResponse.response("admin")
+
+let server = HttpServerRef.new(
+  initTAddress("127.0.0.1:8080"), process,
+  middlewares = [
+    RestServerMiddlewareRef.new(apiRouter),
+    RestServerMiddlewareRef.new(adminRouter)
+  ]).get()
+</code></pre>
+<div id="admonition-tip" class="admonition admonish-tip" role="note" aria-labelledby="admonition-tip-title">
+<div class="admonition-title">
+<div id="admonition-tip-title">
+<p>Tip</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-tip"></a>
+</div>
+<div>
+<p>Because matching considers the HTTP method as well as the path, two routers can
+share the same path and be selected by the request method — for example one
+router handling <code>GET /resource</code> and another handling <code>POST /resource</code>.</p>
+</div>
+</div>
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/middleware.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

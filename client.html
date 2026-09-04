@@ -181,7 +181,15 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="client"><a class="header" href="#client">Client</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="#declaring-client-procedures">Declaring client procedures</a></li>
+<li><a href="#creating-a-client">Creating a client</a></li>
+<li><a href="#calling-an-endpoint">Calling an endpoint</a></li>
+<li><a href="#return-types">Return types</a></li>
+<li><a href="#error-handling">Error handling</a></li>
+<li><a href="#connection-handling">Connection handling</a></li>
+<li><a href="#overloading">Overloading</a></li>
+</ul>
 <p>Presto ships with an HTTP client that is generated from your procedure
 signatures. You describe <em>what</em> a request looks like (its endpoint, method, and
 parameters) and the <a href="api/client.html#rest-macros-all"><code>rest</code></a> macro writes the
@@ -191,7 +199,9 @@ response into a Nim value. The client lives in the
 <h2 id="declaring-client-procedures"><a class="header" href="#declaring-client-procedures">Declaring client procedures</a></h2>
 <p>Annotate a procedure with <code>{.rest.}</code> and describe the request with pragmas. The
 proc must have no body; the macro supplies one.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:declare}}
+<pre><code class="language-nim">proc getUser(id: int): string {.rest, endpoint: "/users/{id}".}
+proc createUser(body: string): string {.
+     rest, endpoint: "/users", meth: MethodPost.}
 </code></pre>
 <p>Parameter names drive how each argument is used:</p>
 <ul>
@@ -217,7 +227,17 @@ See <a href="./routing.html#encoding-and-decoding-parameters">the encode/decode 
 <p><a href="api/client.html#new-procs-all"><code>RestClientRef.new</code></a> can be constructed from a
 <code>TransportAddress</code>, from an <code>HttpAddress</code>, or from a URL string. The URL form
 returns a <code>Result</code> because it resolves the host up front.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:create}}
+<pre><code class="language-nim"># from a transport address
+let client = RestClientRef.new(initTAddress("127.0.0.1:8080"))
+
+# from a URL (returns a Result)
+let client2 = RestClientRef.new("http://api.example.com/").get()
+
+# with flags
+let client3 = RestClientRef.new(
+  initTAddress("127.0.0.1:8080"),
+  HttpClientScheme.NonSecure,
+  flags = {RestClientFlag.CommaSeparatedArray})
 </code></pre>
 <p>Two <a href="api/client.html#RestClientFlag"><code>RestClientFlag</code></a>s tune behavior:</p>
 <ul>
@@ -230,7 +250,16 @@ the resolved address.</li>
 <p>The generated proc is <code>async</code> and takes your declared parameters plus three
 extra keyword arguments: <code>restContentType</code>, <code>restAcceptType</code>, and
 <code>extraHeaders</code>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:call}}
+<pre><code class="language-nim">let client = RestClientRef.new(initTAddress("127.0.0.1:8080"))
+
+let user = await client.getUser(42)
+
+let created = await client.createUser(
+  body = "{\"name\":\"Ada\"}",
+  restContentType = "application/json",
+  extraHeaders = @[("Authorization", "Bearer secret")])
+
+await client.closeWait()
 </code></pre>
 <p><code>restAcceptType</code> overrides the <code>accept</code> pragma at the call site and understands
 quality weights, e.g. <code>"app/type1;q=1.0,app/type2;q=0.1"</code>.</p>
@@ -246,16 +275,30 @@ errors are handled.</p>
 </tbody></table>
 </div>
 <p>Examples:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:returns}}
+<pre><code class="language-nim">proc getStatus(): RestStatus {.rest, endpoint: "/health".}
+proc getRaw(): RestPlainResponse {.rest, endpoint: "/blob".}
+proc getTyped(): RestResponse[int] {.rest, endpoint: "/count".}
+proc getStream(body: string): RestHttpResponseRef {.
+     rest, endpoint: "/download", meth: MethodPost, accept: "*/*".}
 </code></pre>
 <p>Reading a streaming response:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:stream}}
+<pre><code class="language-nim">let resp = await client.getStream("query")
+let reader = resp.getBodyReader()
+let chunk = await reader.read()
+await reader.closeWait()
+await resp.closeWait()
 </code></pre>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error handling</a></h2>
 <p>When a value-returning proc receives a non-2xx status it raises
 <a href="api/presto/common.html#RestResponseError"><code>RestResponseError</code></a>, which carries
 the details of the failed response.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:errors}}
+<pre><code class="language-nim">try:
+  let user = await client.getUser(99999)
+  discard user
+except RestResponseError as exc:
+  echo exc.status        # e.g. 404
+  echo exc.message       # response body as text
+  echo exc.contentType
 </code></pre>
 <p>Other exceptions the generated procs may raise include <code>RestEncodingError</code>
 (a parameter or body failed to encode), <code>RestDnsResolveError</code> (host resolution
@@ -270,14 +313,15 @@ call:</p>
 <li><code>{}</code> or <code>{Dedicated}</code> — keep the connection open for reuse.</li>
 <li><code>{Close}</code> — close the connection after the request.</li>
 </ul>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/client.nim:conn}}
+<pre><code class="language-nim">proc oneShot(): RestPlainResponse {.
+     rest, endpoint: "/once", connection: {Close}.}
 </code></pre>
 <h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
 <p>Because the macro produces ordinary procedures, you can overload the same
 endpoint with different parameter sets, e.g. a queryless variant and
 one that takes filters, and let Nim's overload resolution pick between them at
 the call site.</p>
-
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/client.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

@@ -181,13 +181,17 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="cors-and-metrics"><a class="header" href="#cors-and-metrics">CORS and metrics</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="#cors">CORS</a></li>
+<li><a href="#metrics">Metrics</a></li>
+</ul>
 <h2 id="cors"><a class="header" href="#cors">CORS</a></h2>
 <p>Browsers restrict cross-origin requests unless the server opts in with the
 appropriate <code>Access-Control-Allow-Origin</code> header. Presto handles this at the
 router level: pass an <code>allowedOrigin</code> when you initialize the router with
 <a href="api/presto/route.html#init%2Ctypedesc%5BRestRouter%5D%2CPatternCallback"><code>RestRouter.init</code></a>.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_cors.nim:cors}}
+<pre><code class="language-nim">var router = RestRouter.init(
+  validate, allowedOrigin = some("https://app.example.com"))
 </code></pre>
 <p>When <code>allowedOrigin</code> is set, Presto:</p>
 <ul>
@@ -205,9 +209,18 @@ value may be given with or without an <code>http://</code> / <code>https://</cod
 <li>A request carrying more than one <code>Origin</code> header is rejected with
 <code>400 Bad Request</code>.</li>
 </ul>
-<pre><code class="language-admonish note">`allowedOrigin` is applied by the router and the server together. If you serve a
-router as [middleware](./middleware.md), the same CORS behavior applies.
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-note"></a>
+</div>
+<div>
+<p><code>allowedOrigin</code> is applied by the router and the server together. If you serve a
+router as <a href="./middleware.html">middleware</a>, the same CORS behavior applies.</p>
+</div>
+</div>
 <h2 id="metrics"><a class="header" href="#metrics">Metrics</a></h2>
 <p>Presto can expose operational metrics through the
 <a href="https://github.com/status-im/nim-metrics">nim-metrics</a> library. Metrics
@@ -226,7 +239,14 @@ macros. Pass a set of
 <a href="api/presto/common.html#RestServerMetricsType"><code>RestServerMetricsType</code></a> values
 (<code>Status</code>, <code>Response</code>, or the combined <code>RestServerMetrics</code>) to
 <a href="api/presto/route.html#metricsApi-macros-all"><code>metricsApi</code></a>:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_metrics_server.nim:metrics}}
+<pre><code class="language-nim">router.metricsApi(MethodGet, "/items/{id}",
+                  {RestServerMetricsType.Status}) do (
+    id: int) -&gt; RestApiResponse:
+  RestApiResponse.response("item")
+
+# record both status counts and response timing
+router.metricsApi(MethodGet, "/report", RestServerMetrics) do () -&gt; RestApiResponse:
+  RestApiResponse.response("ok")
 </code></pre>
 <p>A <a href="api/presto/route.html#rawMetricsApi-macros-all"><code>rawMetricsApi</code></a> variant
 exists for raw handlers, mirroring <a href="./routing.html#raw-routes"><code>rawApi</code></a>.</p>
@@ -235,13 +255,25 @@ exists for raw handlers, mirroring <a href="./routing.html#raw-routes"><code>raw
 <a href="api/client.html#metrics-templates-all"><code>metrics</code></a> pragma. The client can record
 DNS resolution time, connection time, request time, response time, and response
 status, each labelled by an endpoint name.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/advanced_metrics_client.nim:metrics}}
+<pre><code class="language-nim"># use the endpoint path as the metric label
+proc getItem(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics.}
+
+# override the label
+proc getItem2(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics: "items_by_id".}
+
+# select which metrics to collect
+proc getItem3(id: int): RestPlainResponse {.
+     rest, endpoint: "/items/{id}", metrics,
+     metricsTypes: {RestClientMetricsType.ResponseTime,
+                    RestClientMetricsType.Status}.}
 </code></pre>
 <p>The available <a href="api/client.html#RestClientMetricsType"><code>RestClientMetricsType</code></a>
 values are <code>ResolveTime</code>, <code>ConnectTime</code>, <code>RequestTime</code>, <code>ResponseTime</code>, and
 <code>Status</code>; <code>RestClientMetricsAllTypes</code> is the full set and is used when
 <code>metricsTypes</code> is omitted.</p>
-
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/cors_metrics.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

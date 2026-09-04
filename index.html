@@ -181,7 +181,13 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="quickstart"><a class="header" href="#quickstart">Quickstart</a></h1>
-<!-- toc -->
+<ul>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#a-minimal-server">A minimal server</a></li>
+<li><a href="#calling-it-from-a-client">Calling it from a client</a></li>
+<li><a href="#api-docs">API Docs</a></li>
+<li><a href="#where-to-go-next">Where to go next</a></li>
+</ul>
 <p>Presto is an asynchronous REST framework for <a href="https://nim-lang.org/">Nim</a>,
 built on top of the <a href="https://github.com/status-im/nim-chronos">Chronos</a> async
 I/O library. It gives you a request router, an HTTP (and HTTPS) server to run it
@@ -210,21 +216,38 @@ request parameters are automatically unmarshalled into Nim types;</li>
 greeting.</p>
 <p>Presto calls a user-supplied <code>decodeString</code> to turn path and query parameters
 into Nim values. Provide one for every type you accept as a parameter.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:decode}}
+<pre><code class="language-nim">proc decodeString*(t: typedesc[string], value: string): RestResult[string] =
+  ok(value)
 </code></pre>
 <p><a href="api/presto/route.html#init%2Ctypedesc%5BRestRouter%5D%2CPatternCallback"><code>RestRouter.init</code></a>
 always takes a validation callback. It is invoked for every <code>{pattern}</code> segment
 in a route; returning <code>0</code> accepts the value and any other value rejects the
 request. If you don't need validation, return <code>0</code> for everything.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:validate}}
+<pre><code class="language-nim">proc validate(pattern: string, value: string): int = 0
 </code></pre>
 <p>With those in place, declare a route with the
 <a href="api/presto/route.html#api-macros-all"><code>api</code></a> macro and serve the router:</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_server.nim:server}}
+<pre><code class="language-nim">var router = RestRouter.init(validate)
+
+router.api(MethodGet, "/") do () -&gt; RestApiResponse:
+  RestApiResponse.response("Hello World", Http200, "text/plain")
+
+let server = RestServerRef.new(router, initTAddress("127.0.0.1:9000")).get()
+server.start()
+runForever()
 </code></pre>
-<pre><code class="language-admonish note">`RestRouter.init` always requires a validation callback — see
-[Routing](./routing.md) for details on patterns and validation.
-</code></pre>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-note"></a>
+</div>
+<div>
+<p><code>RestRouter.init</code> always requires a validation callback — see
+<a href="./routing.html">Routing</a> for details on patterns and validation.</p>
+</div>
+</div>
 <h2 id="calling-it-from-a-client"><a class="header" href="#calling-it-from-a-client">Calling it from a client</a></h2>
 <p>Presto can generate a client procedure straight from a signature. The
 <a href="api/client.html#rest-macros-all"><code>rest</code></a> macro reads the <code>endpoint</code> and <code>meth</code>
@@ -232,7 +255,24 @@ pragmas and produces an async proc that performs the request and decodes the
 response.</p>
 <p>The client lives in the <a href="api/client.html"><code>presto/client</code></a> module, and calls a
 user-supplied <code>decodeBytes</code> to turn the response body into a Nim value.</p>
-<pre><code class="language-nim">{{#shiftinclude auto:../../examples/quickstart_client.nim}}
+<pre><code class="language-nim">import pkg/presto/[common, client]
+
+proc decodeBytes*(t: typedesc[string], value: openArray[byte],
+                  contentType: Opt[ContentTypeData]): RestResult[string] =
+  var res: string
+  if len(value) &gt; 0:
+    res = newString(len(value))
+    copyMem(addr res[0], unsafeAddr value[0], len(value))
+  ok(res)
+
+proc getRoot(): string {.rest, endpoint: "/", meth: MethodGet.}
+
+proc main() {.async.} =
+  let client = RestClientRef.new(initTAddress("127.0.0.1:9000"))
+  echo await client.getRoot()
+  await client.closeWait()
+
+waitFor main()
 </code></pre>
 <h2 id="api-docs"><a class="header" href="#api-docs">API Docs</a></h2>
 <ul>
@@ -257,7 +297,7 @@ HTTP server.</li>
 <li><a href="./advanced.html">CORS and metrics</a> — cross-origin support and Prometheus
 metrics.</li>
 </ul>
-
+<footer id="open-on-gh">Found a bug? <a href="https://github.com/status-im/nim-presto//edit/master/book/src/quickstart.md">Edit this page on GitHub.</a></footer>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
