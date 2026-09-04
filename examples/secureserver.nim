@@ -1,0 +1,77 @@
+import pkg/presto
+import pkg/presto/secureserver
+
+proc decodeString*(t: typedesc[string], value: string): RestResult[string] =
+  ok(value)
+
+proc validate(pattern: string, value: string): int = 0
+
+var router = RestRouter.init(validate)
+router.api(MethodGet, "/") do () -> RestApiResponse:
+  RestApiResponse.response("ok")
+
+# A self-signed key/certificate pair, for demonstration only.
+const myCertPem = """
+-----BEGIN CERTIFICATE-----
+MIIDbTCCAlWgAwIBAgIUXt7sUWAxsChC9lOZb15IwNWO514wDQYJKoZIhvcNAQEL
+BQAwRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoM
+GEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yMTAzMjQxMzI3MDFaGA8zMDIw
+MDcyNTEzMjcwMVowRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUx
+ITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAKL5rge7XWBZsIjWLAfyXaz/VxZec41Rt803oOK+
+5/FeixxPwzQVAWRQVZuYEnx9SlDG0ApSbeuS9zV2lI8NhrWcGGaFYOxwaIN0x/qG
+buWDK+XDUxEhWXfJvwWPDh1oq40M/DCmExNHTnQX2Ep75KGz9fxlqpBGn3V0S15+
+HoX9zXn6p7IMrw7pdAtN3pEGwAAD6wV+RBr66ylpRw+u1WeBpouq6O/hECT1qvgi
+ku6jDpSuqKDTnfCNNmoaUGPGfHO8t0XCCrre1FkQcJQTYoLuz3p35gOyPtmRluWn
+uzIILKhm3koofHbrwiPDZrHaBFE9zACjWMu9IvwbWuectJsCAwEAAaNTMFEwHQYD
+VR0OBBYEFD0j7UYWOb/bFunmDa389UTgoGQ4MB8GA1UdIwQYMBaAFD0j7UYWOb/b
+FunmDa389UTgoGQ4MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
+AA6yZ7r9YwXvNO31lRwUyAYyjoN6eXvinRTn9Hcq+B7mnaPRgMw0O0EcLKTrD4XU
+ZCVq1zxAuGDL/EY8FGRRnnhhQoP4XngWTc72StjbolQJu8QlcXnvdRRuk5ExEhPP
+0PhSoVzNRJnsFKisiYldDdFFHVmLJng62qan2fGou4KVkaAdrNuhzNyBy1rUIXfw
+eCQnwP85i2057ErXu88ZJxbJC//JwOs39xp9UK/QtzY91nHjU95VhpCNz5htY0s7
+aArk38SknwUElPtCKRpkIECZAnLxnJQZS5AodwlaDBSTa8hMtwTxHyAI0OZKkqcI
+gTVPzfifd3YFR/gZ9LzI5gM=
+-----END CERTIFICATE-----
+"""
+const myKeyPem = """
+-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCi+a4Hu11gWbCI
+1iwH8l2s/1cWXnONUbfNN6DivufxXoscT8M0FQFkUFWbmBJ8fUpQxtAKUm3rkvc1
+dpSPDYa1nBhmhWDscGiDdMf6hm7lgyvlw1MRIVl3yb8Fjw4daKuNDPwwphMTR050
+F9hKe+Shs/X8ZaqQRp91dEtefh6F/c15+qeyDK8O6XQLTd6RBsAAA+sFfkQa+usp
+aUcPrtVngaaLqujv4RAk9ar4IpLuow6Urqig053wjTZqGlBjxnxzvLdFwgq63tRZ
+EHCUE2KC7s96d+YDsj7ZkZblp7syCCyoZt5KKHx268Ijw2ax2gRRPcwAo1jLvSL8
+G1rnnLSbAgMBAAECggEARAAr5hv+hSJHL4E1lAdDoNhVrQax7ihHqb/pSFLhkmuh
+XanGSCfvkbyXS7mzFPBuHrAlw/jK1n1W2p7ks5+wMny0DarfWyg344nJmzWWdfs6
+SL8sHLyuiPXL13TuLcUrt0nQvDe/Q87/5B7C56k0J2hgXfTJqzNce3SPshirgbpO
++WDDI5iXt3Qsp0mPVfr81UclfMUcQndgNROB//xbzqxARUGdLA9n4tqQNc9kV9lr
+1T+b08VbJQB26Sw1FZp9Lf9SsN6kwiv1pG6X8q4ZVIeWf9McbmkzWCxgO4wBgZKj
+bpH95hDJNcNiUsjCAh7MUWdpgQQ6GBylV593l3AJ8QKBgQDUYYoSApT0unX3Z5GX
+Iyx0o6+8SI30kCsVonZBj7533MNRYkMo4y5aIlTjRNojEggE4udq6rwyzJ2TCNoX
+ZA6Nswpy4oFNAVtnyfYEn7AbtL6QOHg3U8u2gX9igzfPr+51IDf0qmaSJE60Chj6
+kXyfV/aGAGxV0wS8hI4+hKpmcwKBgQDEcoM/VnBd0y8A/kM71YXcjR0ZfyxF7BXA
+YkNKEhyS83la4u4nhRh0xj/MzI3o7VGY2YZMEZ7iqOzInYpFxS7K9TFlDKcPcjAi
+I07+jKYLlfZAB+5JH/JZfAOPEtTBiv4snmeCjw8Su5K1nENLSUJc1h4oMrJQyyPN
++oG0xTZHOQKBgQCaF4MT+ieVQMxiixSJMg4JOtJAq+vDK+72rX9bpi2tzdEw9TiB
+LAPvhcVNeCFFHMoQsYjyfAm8WdViXyPNoN0mVmcYX9sswfVN4qzLQgmGsKcrAK3I
+htXhPyfrlAUkfSNoe83diN0O36Ty3/irpG9lNW86Xog75PUkypBiL+NqnQKBgGsl
+TiKgob767VssUz1yU4Wcze9XJq2oe6Cnt63RvRYFh/4jYePaOyGN88RfGVOfBO9K
+TW51+eQEYMl267DsQH5gR6WmxgOts0UbXv2FdxdAnsQDz1rA+u0Fr+c8TSCXD9UE
+PM6/+mesOPOnHCkW9wQtoNsp84oPkiLJbC9NlTI5AoGBAIYTVvr4AavxWWYkZ+Nw
+qzb7UdXA+9cF5eyBWpaUSlj1oiirU0f4dM+bDVvmjWTi06I651h7RuU4Ig4V1SkX
+5HM9UDYqJg+fUuCNzVHwzhqCyZUkabM/m/Ii7s0fBlTCF1u3MhXUVgrcl8TZgkea
+7hxiycMFjHlJW2mRwa5ak+PY
+-----END PRIVATE KEY-----
+"""
+
+# ANCHOR: secure
+let
+  key = TLSPrivateKey.init(myKeyPem)
+  cert = TLSCertificate.init(myCertPem)
+  server = SecureRestServerRef.new(
+    router, initTAddress("127.0.0.1:8443"), key, cert).get()
+
+server.start()
+# ANCHOR_END: secure
+discard server
