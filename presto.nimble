@@ -1,3 +1,5 @@
+import os
+
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
@@ -27,10 +29,42 @@ let cfg =
 proc build(args, path: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
 
-proc run(path: string) =
-  build " --mm:refc -r", path
+proc run(args, path: string) =
+  build args & " --mm:refc -r", path
   if (NimMajor, NimMinor) > (1, 6):
-    build " --mm:orc -r", path
+    build args & " --mm:orc -r", path
 
 task test, "Runs rest tests":
-  run "tests/testall"
+  run("", "tests/testall")
+
+task examples, "Compile all examples":
+  echo "\r\n\x1B[0;94m[Suite]\x1B[0;37m Examples"
+  for path in listFiles(thisDir() / "examples"):
+    if path.splitFile().ext != ".nim":
+      continue
+    let filename = path.splitFile().name
+    echo "  Compiling: ", filename
+    try:
+      build("", path)
+      echo "  \x1B[0;92m[OK]\x1B[0;37m ", filename
+    except:
+      echo "  \x1B[0;31m[FAILED]\x1B[0;37m ", filename
+      exec "exit 1"
+
+task apidocs, "Generate the API docs":
+  exec nimc & " doc " &
+    "--git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto"
+  exec nimc & " doc " &
+    "--git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/client"
+  exec nimc & " doc " &
+    "--git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/secureserver"
+  exec nimc & " doc " &
+    "--git.url:https://github.com/status-im/nim-presto --git.commit:master --outdir:docs/api --project presto/middleware"
+
+task book, "Generate the book":
+  exec "mdbook build book/ -d ../docs/"
+
+task docs, "Generate the documentation":
+  rmDir "docs"
+  exec "nimble book"
+  exec "nimble apidocs"

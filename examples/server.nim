@@ -1,18 +1,37 @@
-import pkg/presto/[route, server]
-import stew/byteutils
+import pkg/presto
+
+proc decodeString*(t: typedesc[string], value: string): RestResult[string] =
+  ok(value)
 
 proc validate(pattern: string, value: string): int = 0
 
-when isMainModule:
+proc main() {.async.} =
   var router = RestRouter.init(validate)
+  router.api(MethodGet, "/") do () -> RestApiResponse:
+    RestApiResponse.response("ok")
 
-  router.api(MethodPost, "/hello/world") do (
-             contentBody: Option[ContentBody]) -> RestApiResponse:
-    echo "Client says: ", string.fromBytes(contentBody.get().data)
+  let address = initTAddress("127.0.0.1:8080")
 
-    RestApiResponse.response("Hello Client, I am Server", Http200, "textt/plain")
+  # ANCHOR: create
+  let server = RestServerRef.new(router, address).get()
+  # ANCHOR_END: create
 
-  let restServer = RestServerRef.new(router, initTAddress("127.0.0.1:9000")).get
-  restServer.start()
+  # ANCHOR: errortype
+  let res = RestServerRef.new(router, address, errorType = string)
+  if res.isErr():
+    echo "failed to start: ", res.error()
+  # ANCHOR_END: errortype
 
-  runForever()
+  # ANCHOR: lifecycle
+  server.start()              # begin accepting connections
+  echo server.state           # Running | Stopped | Closed
+  echo server.localAddress()  # actual bound address (useful with port 0)
+  # ANCHOR_END: lifecycle
+
+  # ANCHOR: shutdown
+  await server.stop()         # stop accepting new connections
+  await server.drop()         # drop pending connections
+  await server.closeWait()    # stop and release all resources
+  # ANCHOR_END: shutdown
+
+waitFor main()
