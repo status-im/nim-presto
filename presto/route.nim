@@ -13,6 +13,7 @@ import std/[macros, options]
 import chronos, chronos/apps/http/[httpcommon, httptable, httpserver]
 import httputils
 import stew/bitops2
+import results
 import "."/[btrees, common, segpath, macrocommon]
 export chronos, options, common, httpcommon, httptable, httpserver
 
@@ -20,17 +21,22 @@ when defined(metrics):
   import metrics
 
 type
-  RestApiCallback* =
+  BodyType* = Option[ContentBody] | Opt[ContentBody]
+
+  RestApiCallbackGen*[B: BodyType] =
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
-         body: Option[ContentBody]): Future[RestApiResponse] {.
+         body: B): Future[RestApiResponse] {.
       raises: [], gcsafe.}
 
-  RestApiCallback2* =
+  RestApiCallback2Gen*[B: BodyType] =
     proc(request: HttpRequestRef, pathParams: HttpTable,
          queryParams: HttpTable,
-         body: Option[ContentBody]): Future[RestApiResponse] {.
+         body: B): Future[RestApiResponse] {.
       async: (raises: [CancelledError]).}
+
+  RestApiCallback* = RestApiCallbackGen[Option[ContentBody]]
+  RestApiCallback2* = RestApiCallback2Gen[Option[ContentBody]]
 
   RestRouteKind* {.pure.} = enum
     None, Handler, Redirect
@@ -38,29 +44,34 @@ type
   RestRouterFlag* {.pure.} = enum
     Raw
 
-  RestRoute* = object
+  RestRouteGen*[B: BodyType] = object
     requestPath*: SegmentedPath
     routePath*: SegmentedPath
-    callback*: RestApiCallback2
+    callback*: RestApiCallback2Gen[B]
     flags*: set[RestRouterFlag]
     metrics*: set[RestServerMetricsType]
 
-  RestRouteItem* = object
+  RestRouteItemGen*[B: BodyType] = object
     case kind*: RestRouteKind
     of RestRouteKind.None:
       discard
     of RestRouteKind.Handler:
-      callback: RestApiCallback2
+      callback: RestApiCallback2Gen[B]
     of RestRouteKind.Redirect:
       redirectPath*: SegmentedPath
     path: SegmentedPath
     flags*: set[RestRouterFlag]
     metrics*: set[RestServerMetricsType]
 
-  RestRouter* = object
+  RestRouterGen*[B: BodyType] = object
     patternCallback*: PatternCallback
-    routes*: BTree[SegmentedPath, RestRouteItem]
+    routes*: BTree[SegmentedPath, RestRouteItemGen[B]]
     allowedOrigin*: Option[string]
+
+  RestRoute* = RestRouteGen[Option[ContentBody]]
+  RestRouteItem* = RestRouteItemGen[Option[ContentBody]]
+  RestRouter* = RestRouterGen[Option[ContentBody]]
+  RestRouterOpt* = RestRouterGen[Opt[ContentBody]]
 
 proc init*(t: typedesc[RestRouter],
            patternCallback: PatternCallback,
@@ -71,13 +82,22 @@ proc init*(t: typedesc[RestRouter],
              routes: initBTree[SegmentedPath, RestRouteItem](),
              allowedOrigin: allowedOrigin)
 
-proc init*(t: typedesc[RestRouteItem],
+proc init*[B: BodyType](t: typedesc[RestRouterGen[B]],
+           patternCallback: PatternCallback,
+           allowedOrigin = none(string)): RestRouterGen[B] =
+  doAssert(not(isNil(patternCallback)),
+           "Pattern validation callback must not be nil")
+  RestRouterGen[B](patternCallback: patternCallback,
+                   routes: initBTree[SegmentedPath, RestRouteItemGen[B]](),
+                   allowedOrigin: allowedOrigin)
+
+proc init*[B: BodyType](t: typedesc[RestRouteItemGen[B]],
            spath: SegmentedPath, flags: set[RestRouterFlag],
            metrics: set[RestServerMetricsType],
-           handler: RestApiCallback): RestRouteItem =
+           handler: RestApiCallbackGen[B]): RestRouteItemGen[B] =
   proc trampoline(request: HttpRequestRef, pathParams: HttpTable,
                   queryParams: HttpTable,
-                  body: Option[ContentBody]): Future[RestApiResponse] {.
+                  body: B): Future[RestApiResponse] {.
        async: (raises: [CancelledError]).} =
     try:
       await handler(request, pathParams, queryParams, body)
@@ -87,35 +107,36 @@ proc init*(t: typedesc[RestRouteItem],
       RestApiResponse.error(exc.code, $exc.msg)
     except CatchableError as exc:
       RestApiResponse.error(Http503, $exc.msg)
-  RestRouteItem(kind: RestRouteKind.Handler, path: spath, flags: flags,
-                metrics: metrics, callback: trampoline)
+  RestRouteItemGen[B](kind: RestRouteKind.Handler, path: spath, flags: flags,
+                      metrics: metrics, callback: trampoline)
 
-proc init*(t: typedesc[RestRouteItem],
+proc init*[B: BodyType](t: typedesc[RestRouteItemGen[B]],
            spath: SegmentedPath, flags: set[RestRouterFlag],
            metrics: set[RestServerMetricsType],
-           handler: RestApiCallback2): RestRouteItem =
-  RestRouteItem(kind: RestRouteKind.Handler, path: spath, flags: flags,
-                metrics: metrics, callback: handler)
+           handler: RestApiCallback2Gen[B]): RestRouteItemGen[B] =
+  RestRouteItemGen[B](kind: RestRouteKind.Handler, path: spath, flags: flags,
+                      metrics: metrics, callback: handler)
 
-proc optionsRequestHandler(
+proc optionsRequestHandler[B: BodyType](
        request: HttpRequestRef,
        pathParams: HttpTable,
        queryParams: HttpTable,
-       body: Option[ContentBody]
+       body: B
      ): Future[RestApiResponse] {.async: (raises: [CancelledError]).} =
   RestApiResponse.response("", Http200)
 
-template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
+template addRouteImpl[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+                      path: string,
                       flags: set[RestRouterFlag],
                       metrics: set[RestServerMetricsType],
                       handler: untyped) =
   let
     spath = SegmentedPath.init(meth, path, rr.patternCallback)
     route = rr.routes.getOrDefault(spath,
-                                   RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
   case route.kind
   of RestRouteKind.None:
-    let item = RestRouteItem.init(spath, flags, metrics, handler)
+    let item = RestRouteItemGen[B].init(spath, flags, metrics, handler)
     rr.routes.add(spath, item)
 
     if rr.allowedOrigin.isSome:
@@ -124,10 +145,10 @@ template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
           MethodOptions, path, rr.patternCallback)
       case route.kind
       of RestRouteKind.None:
-        let optionsHandler = RestRouteItem.init(optionsPath,
-                                                {RestRouterFlag.Raw},
-                                                metrics,
-                                                optionsRequestHandler)
+        let optionsHandler = RestRouteItemGen[B].init(optionsPath,
+                                                      {RestRouterFlag.Raw},
+                                                      metrics,
+                                                      optionsRequestHandler[B])
         rr.routes.add(optionsPath, optionsHandler)
       else:
         # This may happen if we use the same URL path in separate GET and
@@ -140,68 +161,73 @@ template addRouteImpl(rr: var RestRouter, meth: HttpMethod, path: string,
 # TODO (cheatfate): There is many duplicates in `addRoute` declarations just
 # because https://github.com/nim-lang/Nim/issues/23218 is not solved yet.
 
-proc addRoute*(rr: var RestRouter, meth: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
-               handler: RestApiCallback) =
+               handler: RestApiCallbackGen[B]) =
   addRouteImpl(rr, meth, path, flags, metrics, handler)
 
-proc addRoute*(rr: var RestRouter, meth: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], meth: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag], metrics: set[RestServerMetricsType],
-               handler: RestApiCallback2) =
+               handler: RestApiCallback2Gen[B]) =
   addRouteImpl(rr, meth, path, flags, metrics, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback) =
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
+               handler: RestApiCallbackGen[B]) =
   addRoute(rr, request, path, {}, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
-               handler: RestApiCallback2) =
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
+               handler: RestApiCallback2Gen[B]) =
   addRoute(rr, request, path, {}, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag],
-               handler: RestApiCallback) =
+               handler: RestApiCallbackGen[B]) =
   addRoute(rr, request, path, flags, {}, handler)
 
-proc addRoute*(rr: var RestRouter, request: HttpMethod, path: string,
+proc addRoute*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+               path: string,
                flags: set[RestRouterFlag],
-               handler: RestApiCallback2) =
+               handler: RestApiCallback2Gen[B]) =
   addRoute(rr, request, path, flags, {}, handler)
 
-proc addRedirect*(rr: var RestRouter, request: HttpMethod, srcPath: string,
-                  dstPath: string) =
+proc addRedirect*[B: BodyType](rr: var RestRouterGen[B], request: HttpMethod,
+                  srcPath: string, dstPath: string) =
   let
     spath = SegmentedPath.init(request, srcPath, rr.patternCallback)
     dpath = SegmentedPath.init(request, dstPath, rr.patternCallback)
     route = rr.routes.getOrDefault(spath,
-                                   RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
   case route.kind
   of RestRouteKind.None:
-    let item = RestRouteItem(kind: RestRouteKind.Redirect,
-                             path: spath, redirectPath: dpath)
+    let item = RestRouteItemGen[B](kind: RestRouteKind.Redirect,
+                                   path: spath, redirectPath: dpath)
     rr.routes.add(spath, item)
   else:
     raiseAssert("The route is already in the routing table")
 
-proc getRoute*(rr: RestRouter, spath: SegmentedPath): Option[RestRoute] =
+proc getRoute*[B: BodyType](rr: RestRouterGen[B],
+               spath: SegmentedPath): Option[RestRouteGen[B]] =
   var path = spath
   while true:
     let route = rr.routes.getOrDefault(path,
-                                       RestRouteItem(kind: RestRouteKind.None))
+                                   RestRouteItemGen[B](kind: RestRouteKind.None))
     case route.kind
     of RestRouteKind.None:
-      return none[RestRoute]()
+      return none[RestRouteGen[B]]()
     of RestRouteKind.Handler:
-      # Route handler was found
-      let item = RestRoute(requestPath: path, routePath: route.path,
-                           flags: route.flags, callback: route.callback,
-                           metrics: route.metrics)
+      let item = RestRouteGen[B](requestPath: path, routePath: route.path,
+                                 flags: route.flags, callback: route.callback,
+                                 metrics: route.metrics)
       return some(item)
     of RestRouteKind.Redirect:
-      # Route redirection was found, so we perform path transformation
       path = rewritePath(route.path, route.redirectPath, path)
 
-iterator params*(route: RestRoute): string =
+iterator params*[B: BodyType](route: RestRouteGen[B]): string =
   var pats = route.routePath.patterns
   while pats != 0'u64:
     let index = firstOne(pats) - 1
@@ -210,7 +236,8 @@ iterator params*(route: RestRoute): string =
     yield route.requestPath.data[index]
     pats = pats and not(1'u64 shl index)
 
-iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
+iterator pairs*[B: BodyType](route: RestRouteGen[B]):
+  tuple[key: string, value: string] {.
   raises: [].} =
   var pats = route.routePath.patterns
   while pats != 0'u64:
@@ -221,19 +248,19 @@ iterator pairs*(route: RestRoute): tuple[key: string, value: string] {.
     yield (key, route.requestPath.data[index])
     pats = pats and not(1'u64 shl index)
 
-proc getParamsTable*(route: RestRoute): HttpTable =
+proc getParamsTable*[B: BodyType](route: RestRouteGen[B]): HttpTable =
   var res = HttpTable.init()
   for key, value in route.pairs():
     res.add(key, value)
   res
 
-proc getParamsList*(route: RestRoute): seq[string] =
+proc getParamsList*[B: BodyType](route: RestRouteGen[B]): seq[string] =
   var res: seq[string]
   for item in route.params():
     res.add(item)
   res
 
-macro redirect*(router: RestRouter, meth: static[HttpMethod],
+macro redirect*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                 fromPath: static[string], toPath: static[string]): untyped =
   ## Define REST API endpoint which redirects request to different compatible
   ## endpoint ("/somecall" will be redirected to "/api/somecall").
@@ -284,6 +311,13 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     queryParams = newIdentNode("queryParams")
     requestParam = newIdentNode("request")
     bodyParam = newIdentNode("bodyArg")
+    bodyType =
+      block:
+        let routerType = getTypeInst(router)
+        if routerType.isBracketExpr("RestRouterGen"):
+          routerType[1]
+        else:
+          nnkBracketExpr.newTree(ident("Option"), ident("ContentBody"))
     spath = SegmentedPath.init(meth, pathStr, nil)
     # Not sure about this, it creates HttpMethod(int).
     methIdent = newLit(meth)
@@ -292,16 +326,18 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
 
   # Validating and retrieve arguments.
   #
-  # `bodyArgument` will hold name of `Option[ContentBody]` argument which
+  # `bodyArgument` will hold name of `Option|Opt[ContentBody]` argument which
   # used to obtain request's content body.
   # `respArgument` will hold name of `HttpResponseRef` argument which used
   # to manipulate response.
   # `optionalArguments` will hold sequence of all the optional arguments.
   # `pathArguments` will hold sequence of all the path (required) arguments.
-  let (bodyArgument, respArgument, optionalArguments, pathArguments) =
+  let (bodyArgument, bodyArgType, respArgument,
+       optionalArguments, pathArguments) =
     block:
       var
         bodyRes: NimNode = nil
+        bodyTypeRes: NimNode = nil
         respRes: NimNode = nil
         optionalRes: seq[tuple[name, ntype: NimNode]]
         pathRes: seq[tuple[name, ntype: NimNode]]
@@ -330,6 +366,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           if isContentBodyArg(paramType):
             if isNil(bodyRes):
               bodyRes = paramName
+              bodyTypeRes = paramType
             else:
               error("There should be only one argument of " &
                     paramType.strVal & " type", paramType)
@@ -342,7 +379,14 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           elif isOptionalArg(paramType) or isSequenceArg(paramType):
             optionalRes.add((paramName, paramType))
 
-      (bodyRes, respRes, optionalRes, pathRes)
+      (bodyRes, bodyTypeRes, respRes, optionalRes, pathRes)
+
+  # Validate: the user-declared body argument type must match the router's.
+  if not(isNil(bodyArgType)) and isContentBodyArg(bodyArgType):
+    if not eqIdent(bodyArgType[0], bodyType[0]):
+      error("Body argument type '" & repr(bodyArgType) &
+            "' does not match router body type '" & repr(bodyType) & "'",
+            bodyArgType)
 
   # All "path" arguments should be present
   if len(patterns) != 0:
@@ -376,7 +420,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       var res = newStmtList()
       for (paramName, paramType) in optionalArguments:
         let strName = newStrLitNode($paramName)
-        if isOptionalArg(paramType):
+        if isOptionArg(paramType):
           # Optional arguments which has type `Option[T]`.
           let optType = getOptionType(paramType)
           res.add(quote do:
@@ -385,6 +429,18 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
                 none[Result[`optType`, cstring]]()
               else:
                 some[Result[`optType`, cstring]](
+                  decodeString(`optType`, `queryParams`.getString(`strName`))
+                )
+          )
+        elif isOptArg(paramType):
+          # Optional arguments which has type `Opt[T]`.
+          let optType = getOptionType(paramType)
+          res.add(quote do:
+            let `paramName` {.used.}: Opt[Result[`optType`, cstring]] =
+              if `strName` notin `queryParams`:
+                Opt.none(Result[`optType`, cstring])
+              else:
+                Opt.some(
                   decodeString(`optType`, `queryParams`.getString(`strName`))
                 )
           )
@@ -416,7 +472,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
       var res = newStmtList()
       if not(isNil(bodyArgument)):
         res.add(quote do:
-          let `bodyArgument` {.used.}: Option[ContentBody] = `bodyParam`
+          let `bodyArgument` {.used.}: `bodyType` = `bodyParam`
         )
       res
 
@@ -438,7 +494,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           `requestParam`: HttpRequestRef,
           `pathParams`: HttpTable,
           `queryParams`: HttpTable,
-          `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
+          `bodyParam`: `bodyType`): Future[RestApiResponse] {.
           async: (raises: [CancelledError]).} =
         template preferredContentType(
           t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
@@ -457,7 +513,7 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
           `requestParam`: HttpRequestRef,
           `pathParams`: HttpTable,
           `queryParams`: HttpTable,
-          `bodyParam`: Option[ContentBody]): Future[RestApiResponse] {.
+          `bodyParam`: `bodyType`): Future[RestApiResponse] {.
           async.} =
         template preferredContentType(
           t: varargs[MediaType]): Result[MediaType, cstring] {.used.} =
@@ -475,42 +531,42 @@ proc processApiCall(router: NimNode, meth: HttpMethod,
     echo "\n", path, ": ", repr(res)
   return res
 
-macro api*(router: RestRouter, meth: static[HttpMethod],
+macro api*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {}, {}, false, body)
 
-macro rawApi*(router: RestRouter, meth: static[HttpMethod],
+macro rawApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, false, body)
 
-macro metricsApi*(router: RestRouter, meth: static[HttpMethod],
+macro metricsApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                   path: static[string],
                   metrics: static[set[RestServerMetricsType]],
                   body: untyped): untyped =
   processApiCall(router, meth, path, {}, metrics, false, body)
 
-macro rawMetricsApi*(router: RestRouter, meth: static[HttpMethod],
+macro rawMetricsApi*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                      path: static[string],
                      metrics: static[set[RestServerMetricsType]],
                      body: untyped): untyped =
   processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, false, body)
 
-macro api2*(router: RestRouter, meth: static[HttpMethod],
+macro api2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
            path: static[string], body: untyped): untyped =
   processApiCall(router, meth, path, {}, {}, true, body)
 
-macro rawApi2*(router: RestRouter, meth: static[HttpMethod],
+macro rawApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, true, body)
 
-macro metricsApi2*(router: RestRouter, meth: static[HttpMethod],
+macro metricsApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                   path: static[string],
                   metrics: static[set[RestServerMetricsType]],
                   body: untyped): untyped =
-  processApiCall(router, meth, path, {}, metrics, false, body)
+  processApiCall(router, meth, path, {}, metrics, true, body)
 
-macro rawMetricsApi2*(router: RestRouter, meth: static[HttpMethod],
+macro rawMetricsApi2*[B: BodyType](router: RestRouterGen[B], meth: static[HttpMethod],
                      path: static[string],
                      metrics: static[set[RestServerMetricsType]],
                      body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, true, body)
