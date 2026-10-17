@@ -3,13 +3,13 @@ import os
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
-version       = "0.1.3"
+version       = "0.2.0"
 author        = "Status Research & Development GmbH"
 description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
-requires "nim >= 1.6.18",
+requires "nim >= 2.2.14",
          "chronos >= 4.0.3 & <5.0.0",
          "chronicles >= 0.12.4",
          "metrics >= 0.1.0",
@@ -20,11 +20,13 @@ let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
 let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
 let verbose = getEnv("V", "") notin ["", "0"]
+let platform = getEnv("PLATFORM", "")
 
 let cfg =
   " --styleCheck:usages --styleCheck:error" &
   (if verbose: "" else: " --verbosity:0") &
-  " --skipParentCfg --skipUserCfg --outdir:build --nimcache:build/nimcache -f"
+  " --skipParentCfg --skipUserCfg --outdir:build " &
+  quoteShell("--nimcache:build/nimcache/$projectName")
 
 proc build(args, path: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
@@ -36,6 +38,21 @@ proc run(args, path: string) =
 
 task test, "Runs rest tests":
   run("", "tests/testall")
+
+task test_asan, "Run all tests with ASAN":
+  if platform != "x86":
+    # https://clang.llvm.org/docs/AddressSanitizer.html
+    putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=1")
+    # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
+    putEnv("UBSAN_OPTIONS", "print_stacktrace=1")
+    let asanArgs =
+      " --mm:orc -d:useMalloc --cc:clang --debugger:native" &
+      " --passC:-fsanitize=address,undefined" &
+      " --passL:-fsanitize=address,undefined" &
+      " --passC:-fno-sanitize-recover=undefined" &
+      " --passC:-fno-sanitize-merge" &
+      " --passC:-fno-omit-frame-pointer"
+    build asanArgs & " -r", "tests/testall"
 
 task examples, "Compile all examples":
   echo "\r\n\x1B[0;94m[Suite]\x1B[0;37m Examples"
