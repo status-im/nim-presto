@@ -501,16 +501,16 @@ macro api2*(router: RestRouter, meth: static[HttpMethod],
 
 macro rawApi2*(router: RestRouter, meth: static[HttpMethod],
               path: static[string], body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, {}, true, body)
 
 macro metricsApi2*(router: RestRouter, meth: static[HttpMethod],
                   path: static[string],
                   metrics: static[set[RestServerMetricsType]],
                   body: untyped): untyped =
-  processApiCall(router, meth, path, {}, metrics, false, body)
+  processApiCall(router, meth, path, {}, metrics, true, body)
 
 macro rawMetricsApi2*(router: RestRouter, meth: static[HttpMethod],
                      path: static[string],
                      metrics: static[set[RestServerMetricsType]],
                      body: untyped): untyped =
-  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, false, body)
+  processApiCall(router, meth, path, {RestRouterFlag.Raw}, metrics, true, body)
