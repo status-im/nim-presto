@@ -3,13 +3,13 @@ import os
 mode = ScriptMode.Verbose
 
 packageName   = "presto"
-version       = "0.1.3"
+version       = "0.2.0"
 author        = "Status Research & Development GmbH"
 description   = "REST API implementation"
 license       = "MIT"
 skipDirs      = @["tests", "examples"]
 
-requires "nim >= 1.6.18",
+requires "nim >= 2.2.2",
          "chronos >= 4.0.3 & <5.0.0",
          "chronicles >= 0.12.4",
          "metrics >= 0.1.0",
